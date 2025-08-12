@@ -1,3 +1,4 @@
+
 @echo off
 REM zL
 call venv\Scripts\activate
