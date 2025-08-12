@@ -1,1 +1,19 @@
-config.ini
+# Pythonのキャッシュファイル
+__pycache__/
+*.pyc
+# 仮想環境
+venv/
+# Windows実行ファイル
+*.exe
+# その他のバイナリファイルを無視
+*.dll
+*.so
+*.dylib
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.zip
+*.tar
+*.rar
+*.7z
