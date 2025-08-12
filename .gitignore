@@ -5,3 +5,15 @@ __pycache__/
 venv/
 # Windows実行ファイル
 *.exe
+# その他のバイナリファイルを無視
+*.dll
+*.so
+*.dylib
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.zip
+*.tar
+*.rar
+*.7z

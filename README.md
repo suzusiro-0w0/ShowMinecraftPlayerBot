@@ -1,6 +1,7 @@
 # ShowMinecraftPlayerBot
 
 このボットはMinecraftサーバーのオンライン状況をDiscord上のプレゼンスに表示します。
+プレゼンス名にオンライン人数を表示し、プレイヤー名をステータスで確認できます。
 
 ## 使い方
 1. `example_config.ini`を`config.ini`にコピーし、DiscordのボットトークンとMinecraftサーバーのアドレスを設定してください。

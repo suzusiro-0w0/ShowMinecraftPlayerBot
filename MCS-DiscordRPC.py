@@ -19,7 +19,7 @@ TOKEN = config.get('DEFAULT', 'token')
 SERVER_ADDRESS = config.get('DEFAULT', 'server_address')
 
 # Discordクライアントの生成（特別なIntentsは不要なのでデフォルトを使用）
-bot = discord.Client(intents=discord.Intents.default())
+bot = discord.Client(intents=discord.Intents.default())  # Discordに接続するためのクライアント
 
 
 # on_ready関数
@@ -47,9 +47,9 @@ tmp_player_count = -1
 @tasks.loop(seconds=30)
 async def update_presence():
     # グローバル変数の参照を宣言
-    global isAwake, tmp_player_count
+    global isAwake, tmp_player_count  # 状態管理の変数をグローバルとして使用
 
-    try:
+    try:  # サーバー情報の取得を試みる
         # Minecraftサーバーの情報を取得するインスタンスを生成
         server = JavaServer.lookup(SERVER_ADDRESS)
 
@@ -63,48 +63,47 @@ async def update_presence():
         # プレイヤー名のリストを取得する
         try:
             # サーバーがクエリに対応している場合はこちらを利用
-            query = server.query()
+            query = server.query()  # クエリ機能で詳細情報を取得
             player_names = ', '.join(query.players.names) if query.players.names else 'プレイヤーはいません'
         except Exception:
             # クエリが無効な場合はstatusのサンプル情報から取得
-            sample = status.players.sample or []
+            sample = status.players.sample or []  # サンプルからプレイヤー情報を取得
             player_names = ', '.join(p.name for p in sample) if sample else 'プレイヤーはいません'
 
         # Discordのリッチプレゼンス情報を作成
         activity = discord.Activity(
             type=discord.ActivityType.playing,                   # プレイ中のアクティビティとして表示
-            name='Minecraft Server',                              # ゲーム名として表示する文字列
-            details=f'{player_count}/{max_players} players online',# 詳細欄にプレイヤー人数を表示
-            state=player_names                                    # 状態欄にプレイヤー名を表示
+            name=f'{player_count}/{max_players} players online', # 名前欄にプレイヤー人数を表示
+            state=player_names                                   # 状態欄にプレイヤー名を表示
         )
         # プレゼンスを更新
-        await bot.change_presence(activity=activity)
+        await bot.change_presence(activity=activity)  # 作成したプレゼンスをDiscordに送信
 
         # 状態の更新をコンソールに表示
         if not isAwake:
             # 初回のみオンラインになったことを示す
             isAwake = True
-        if tmp_player_count != player_count:
+        if tmp_player_count != player_count:  # 前回と人数が変わったか確認
             # プレイヤー数が変わった場合のみ表示を更新
-            tmp_player_count = player_count
-            print(f'Updated presence: {player_count} / {max_players} players online')
+            tmp_player_count = player_count  # 最新の人数を保存
+            print(f'Updated presence: {player_count} / {max_players} players online')  # 変更を表示
 
     except (ConnectionRefusedError, TimeoutError) as e:
         # サーバーがオフラインの場合の処理
         print(f'Error retrieving server status: {e}')
         # オフラインであることを示すプレゼンスを作成
         activity = discord.Activity(
-            type=discord.ActivityType.playing,
-            name='Server is offline'
+            type=discord.ActivityType.playing,  # プレイ中表示で統一
+            name='Server is offline'           # オフラインであることを名前に表示
         )
         # プレゼンスを更新
-        await bot.change_presence(activity=activity)
+        await bot.change_presence(activity=activity)  # オフライン情報をDiscordに送信
 
         if isAwake:
             # オフラインになったことを一度だけ表示
-            print('Updated presence: Server is offline')
-            isAwake = False
-            tmp_player_count = -1
+            print('Updated presence: Server is offline')  # オフラインになったことを表示
+            isAwake = False  # フラグをリセット
+            tmp_player_count = -1  # プレイヤー人数をリセット
 
 # ボットを起動
-bot.run(TOKEN)
+bot.run(TOKEN)  # TOKENを使用してDiscordに接続

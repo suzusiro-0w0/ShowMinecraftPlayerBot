@@ -1,6 +1,7 @@
+
 @echo off
-REM 仮想環境を有効化する
+REM zL
 call venv\Scripts\activate
-REM ボットを起動する
+REM {bgN
 python "MCS-DiscordRPC.py"
 pause
