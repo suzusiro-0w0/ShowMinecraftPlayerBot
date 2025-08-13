@@ -18,7 +18,7 @@ TOKEN = config.get('DEFAULT', 'token')
 # Minecraftサーバーのアドレス（config.iniから取得）
 SERVER_ADDRESS = config.get('DEFAULT', 'server_address')
 # Discordリッチプレゼンスに表示するボタンのリンク（空文字の場合はボタン非表示）
-BUTTON_LINK = config.get('DEFAULT', 'ButtonLink', fallback='')
+BUTTON_LINK = config.get('DEFAULT', 'ButtonLink', fallback='').strip('"')  # 余分な引用符を除去
 
 # Discordクライアントの生成（特別なIntentsは不要なのでデフォルトを使用）
 bot = discord.Client(intents=discord.Intents.default())  # Discordに接続するためのクライアント
@@ -51,6 +51,11 @@ async def update_presence():
     # グローバル変数の参照を宣言
     global isAwake, tmp_player_count  # 状態管理の変数をグローバルとして使用
 
+    # ボタン情報のリストを作成（リンクが設定されている場合のみボタンを表示）
+    buttons = [{"label": "Join Server", "url": BUTTON_LINK}] if BUTTON_LINK else None  # ボタン情報
+    # DiscordアプリケーションID（ボットユーザーIDと同じ）を取得
+    app_id = bot.user.id  # ボタン表示のために必要なアプリケーションID
+
     try:  # サーバー情報の取得を試みる
         # Minecraftサーバーの情報を取得するインスタンスを生成
         server = JavaServer.lookup(SERVER_ADDRESS)
@@ -72,14 +77,12 @@ async def update_presence():
             sample = status.players.sample or []  # サンプルからプレイヤー情報を取得
             player_names = ', '.join(p.name for p in sample) if sample else 'プレイヤーはいません'
 
-        # ボタン情報のリストを作成（リンクが設定されている場合のみボタンを表示）
-        buttons = [{"label": "Join Server", "url": BUTTON_LINK}] if BUTTON_LINK else None
-
         # Discordのリッチプレゼンス情報を作成
         activity = discord.Activity(
             type=discord.ActivityType.playing,                   # プレイ中のアクティビティとして表示
             name=f'{player_count}/{max_players} players online', # 名前欄にプレイヤー人数を表示
             state=player_names,                                  # 状態欄にプレイヤー名を表示
+            application_id=app_id,                               # ボタン表示のためのアプリケーションID
             buttons=buttons                                      # ボタン情報を設定（Noneの場合は非表示）
         )
         # プレゼンスを更新
@@ -100,7 +103,9 @@ async def update_presence():
         # オフラインであることを示すプレゼンスを作成
         activity = discord.Activity(
             type=discord.ActivityType.playing,  # プレイ中表示で統一
-            name='Server is offline'           # オフラインであることを名前に表示
+            name='Server is offline',           # オフラインであることを名前に表示
+            application_id=app_id,              # ボタン表示のためのアプリケーションID
+            buttons=buttons                     # ボタン情報を設定（Noneの場合は非表示）
         )
         # プレゼンスを更新
         await bot.change_presence(activity=activity)  # オフライン情報をDiscordに送信
