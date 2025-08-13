@@ -17,3 +17,5 @@ venv/
 *.tar
 *.rar
 *.7z
+# ユーザー固有の設定ファイルを無視
+config.ini
