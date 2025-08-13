@@ -17,6 +17,8 @@ config.read('config.ini')
 TOKEN = config.get('DEFAULT', 'token')
 # Minecraftサーバーのアドレス（config.iniから取得）
 SERVER_ADDRESS = config.get('DEFAULT', 'server_address')
+# Discordリッチプレゼンスに表示するボタンのリンク（空文字の場合はボタン非表示）
+BUTTON_LINK = config.get('DEFAULT', 'ButtonLink', fallback='')
 
 # Discordクライアントの生成（特別なIntentsは不要なのでデフォルトを使用）
 bot = discord.Client(intents=discord.Intents.default())  # Discordに接続するためのクライアント
@@ -70,11 +72,15 @@ async def update_presence():
             sample = status.players.sample or []  # サンプルからプレイヤー情報を取得
             player_names = ', '.join(p.name for p in sample) if sample else 'プレイヤーはいません'
 
+        # ボタン情報のリストを作成（リンクが設定されている場合のみボタンを表示）
+        buttons = [{"label": "Join Server", "url": BUTTON_LINK}] if BUTTON_LINK else None
+
         # Discordのリッチプレゼンス情報を作成
         activity = discord.Activity(
             type=discord.ActivityType.playing,                   # プレイ中のアクティビティとして表示
             name=f'{player_count}/{max_players} players online', # 名前欄にプレイヤー人数を表示
-            state=player_names                                   # 状態欄にプレイヤー名を表示
+            state=player_names,                                  # 状態欄にプレイヤー名を表示
+            buttons=buttons                                      # ボタン情報を設定（Noneの場合は非表示）
         )
         # プレゼンスを更新
         await bot.change_presence(activity=activity)  # 作成したプレゼンスをDiscordに送信
