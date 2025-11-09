@@ -171,6 +171,7 @@ class StatusManager:
     #   戻り値: discord.Message -> 確保したメッセージ
     async def _ensure_status_message(self) -> discord.Message:
         channel = await self._resolve_status_channel()
+
         stored_channel_id = self._data.get('channel_id')  # 永続化されているチャンネルID
         message_id = self._data.get('message_id')  # 永続化されているメッセージID
         message: Optional[discord.Message] = None  # 取得したメッセージの一時格納先
@@ -180,11 +181,13 @@ class StatusManager:
             self._logger.info('永続化ファイル内のチャンネルIDが設定と異なるためメッセージを再生成します')
             message_id = None
 
+
         if message_id is not None:
             try:
                 message = await channel.fetch_message(int(message_id))
             except discord.NotFound:
                 self._logger.info('永続化されたメッセージが見つからなかったため再作成します')
+
 
         # メッセージが取得できなかった場合は新規作成する
         if message is None:
@@ -195,6 +198,7 @@ class StatusManager:
             self._data['channel_id'] = channel.id
             self._data['message_id'] = message.id
             await self._save_store_locked()
+
         self._status_message = message
         return message
 
