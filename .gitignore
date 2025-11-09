@@ -5,7 +5,7 @@ __pycache__/
 venv/
 # Windows実行ファイル
 *.exe
-# その他のバイナリファイルを無視
+# その他のバイナリファイルを無視（Codex向けに幅広く除外）
 *.dll
 *.so
 *.dylib
@@ -13,9 +13,25 @@ venv/
 *.jpg
 *.jpeg
 *.gif
+*.bmp
+*.ico
+*.icns
 *.zip
 *.tar
 *.rar
 *.7z
+*.gz
+*.bz2
+*.xz
+*.zst
+*.bin
+*.dat
+*.class
+*.o
+*.a
+*.obj
+*.lib
+*.exe~
+*.swp
 # ユーザー固有の設定ファイルを無視
 config.ini
