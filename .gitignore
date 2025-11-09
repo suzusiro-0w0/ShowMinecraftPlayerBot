@@ -1,22 +1,48 @@
-# Pythonのキャッシュファイル
-__pycache__/
-*.pyc
-# 仮想環境
-venv/
-# Windows実行ファイル
+# バイナリファイルやエディタ生成物をコミットしないための設定（Codex 推奨除外パターンを含む）
+# -- 実行ファイル
 *.exe
-# その他のバイナリファイルを無視
 *.dll
 *.so
 *.dylib
+*.bin
+*.msi
+*.pdb
+# -- アーカイブ
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tbz
+*.rar
+*.7z
+# -- 画像・メディア
 *.png
 *.jpg
 *.jpeg
 *.gif
-*.zip
-*.tar
-*.rar
-*.7z
-*.bin
-# ユーザー固有の設定ファイルを無視
+*.bmp
+*.tiff
+*.ico
+*.mp3
+*.wav
+*.mp4
+*.mov
+# -- ログ・キャッシュ
+*.log
+*.tmp
+*.cache
+*.pyc
+*.pyo
+__pycache__/
+# -- 仮想環境
+venv/
+.venv/
+.env
+# -- エディタ / OS 生成物
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+# -- 機密情報
 config.ini

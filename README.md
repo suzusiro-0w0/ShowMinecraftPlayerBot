@@ -1,13 +1,18 @@
 # ShowMinecraftPlayerBot
 
-このボットはMinecraftサーバーのオンライン状況をDiscord上のプレゼンスに表示します。
-プレゼンス名にオンライン人数を表示し、プレイヤー名をステータスで確認できます。
+このボットはMinecraftサーバーの状態をDiscordのテキストチャンネルに表示し、コマンドから起動・停止・再起動を操作できます。
+ステータス専用メッセージを定期的に更新し、ユーザーが発行したコマンドやボットの応答は一定時間後に削除してチャンネルを常にクリーンに保ちます。
 
 ## 使い方
-1. `example_config.ini`を`config.ini`にコピーし、DiscordのボットトークンとMinecraftサーバーのアドレスを設定してください。
-   `ButtonLink`にURLを設定するとプレゼンスにボタンが表示されます。
+1. `example_config.ini`を`config.ini`にコピーし、Discordボットトークン、ステータス兼コマンドチャンネルID、管理者チャンネルID、WinSW設定などを入力します。
 2. `setup.sh`または`setup.bat`を実行し、必要なライブラリをインストールしてください。
-3. 仮想環境を有効化し、`run.bat`（Windows）または`python MCS-DiscordRPC.py`を実行してボットを起動します。
+3. 仮想環境を有効化し、`python -m bot.main` を実行してボットを起動します。
+
+## 主な機能
+- ステータス兼コマンドチャンネルにサーバー状態とログイン中プレイヤーを表示
+- `!start_server` / `!stop_server` / `!restart_server` コマンドでサーバーを操作
+- コマンドとBot応答を一定時間後に削除しチャンネルを整理
+- 管理者チャンネルへエラー通知を送信
 
 ## 必要なライブラリ
 - discord.py
