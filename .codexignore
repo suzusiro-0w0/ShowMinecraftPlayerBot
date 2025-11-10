@@ -1,0 +1,14 @@
+# バイナリファイルをPR対象から除外するための設定
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.zip
+*.tar
+*.gz
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+*.pdf
