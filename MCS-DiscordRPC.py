@@ -11,8 +11,24 @@ import configparser
 
 # 設定ファイルを読み込むためのインスタンス
 config = configparser.ConfigParser()
-# config.iniから設定値を読み込む
-config.read('config.ini')
+# 設定ファイルの読み込みに使用するエンコーディング候補（BOM付きUTF-8と日本語Windows環境のcp932を含める）
+encoding_candidates = ['utf-8', 'utf-8-sig', 'cp932']
+# 設定ファイルが正常に読み込めたかどうかを表すフラグ
+config_loaded = False
+# 想定されるエンコーディングを順番に試して読み込む
+for encoding in encoding_candidates:
+    try:
+        # config.iniから設定値を読み込む（読み込めた場合はループを抜ける）
+        if config.read('config.ini', encoding=encoding):
+            config_loaded = True
+            break
+    except UnicodeDecodeError:
+        # エンコーディングが一致しない場合は次の候補を試す
+        continue
+
+# どのエンコーディングでも読み込めなかった場合はエラーを投げて終了する
+if not config_loaded:
+    raise UnicodeDecodeError('config.ini', b'', 0, 0, '設定ファイルを読み込めませんでした。エンコーディングをUTF-8に変更してください。')
 # Discordのボットトークン（config.iniから取得）
 TOKEN = config.get('DEFAULT', 'token')
 # Minecraftサーバーのアドレス（config.iniから取得）
