@@ -2,3 +2,5 @@
 discord.py
 # Minecraftサーバー状態取得ライブラリ
 mcstatus
+# RCONクライアントライブラリ
+mcrcon
