@@ -50,8 +50,6 @@ class CommandSection:
 
     # サーバー起動スクリプトのパスを保持する変数
     start_command: str
-    # サーバー停止スクリプトのパスを保持する変数
-    stop_command: str
     # サーバー再起動スクリプトのパスを保持する変数
     restart_command: str
     # 外部コマンド実行のタイムアウト秒数を保持する変数
@@ -185,7 +183,6 @@ class ConfigLoader:
         section = self._parser["commands"]
         return CommandSection(
             start_command=section.get("start_command", ""),
-            stop_command=section.get("stop_command", ""),
             restart_command=section.get("restart_command", ""),
             command_timeout=section.getint("command_timeout", 60),
         )
@@ -221,7 +218,6 @@ class ConfigLoader:
                 },
                 "commands": {
                     "start_command": "",
-                    "stop_command": "",
                     "restart_command": "",
                     "command_timeout": "60",
                 },

@@ -45,7 +45,6 @@ async def main() -> None:
         rcon_port=config.server.rcon_port,
         rcon_password=config.server.rcon_password,
         start_command=config.commands.start_command,
-        stop_command=config.commands.stop_command,
         restart_command=config.commands.restart_command,
         command_timeout=config.commands.command_timeout,
     )

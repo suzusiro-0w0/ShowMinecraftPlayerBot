@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Tuple
 
 import discord
 
@@ -159,19 +159,45 @@ class StatusMessageManager:
     # 引数: state は状態文字列、players はプレイヤー名リスト、note は補足文
     # 戻り値: discord.Embed
     def _build_embed(self, state: str, players: Iterable[str], note: Optional[str]) -> discord.Embed:
+        # 現在の状態に応じた表示名・色・アイコンを取得する処理
+        state_label, colour, emoji = self._resolve_state_appearance(state)
         # プレイヤー一覧と人数を整形する処理
         player_list = list(players)
         player_count = len(player_list)
-        description_lines = [
-            f"最終更新: {datetime.now(timezone.utc).astimezone().strftime('%Y-%m-%d %H:%M:%S')}",
-            f"プレイヤー数: {player_count}",
-            "プレイヤー一覧: " + (", ".join(player_list) if player_list else "なし"),
-        ]
+        player_field_value = "\n".join(f"・{name}" for name in player_list) if player_list else "なし"
+        # Embed本体を構築する処理
+        embed = discord.Embed(
+            title=f"{emoji} サーバー状態: {state_label}",
+            colour=colour,
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.add_field(name="状態コード", value=state or "不明", inline=True)
+        embed.add_field(name="オンライン人数", value=f"{player_count} 人", inline=True)
+        embed.add_field(name="プレイヤー一覧", value=player_field_value, inline=False)
         if note:
-            description_lines.append(f"補足: {note}")
-        embed = discord.Embed(title=f"サーバー状態: {state}", description="\n".join(description_lines), colour=discord.Colour.green())
+            embed.add_field(name="補足情報", value=note, inline=False)
         embed.set_footer(text="ShowMinecraftPlayerBot")
         return embed
+
+    # このメソッドは状態に応じた表示情報を返す
+    # 呼び出し元: _build_embed
+    # 引数: state はサーバー状態文字列
+    # 戻り値: (表示名, 色, アイコン絵文字) のタプル
+    def _resolve_state_appearance(self, state: str) -> Tuple[str, discord.Colour, str]:
+        # 状態ごとの表示設定を保持する辞書を定義する処理
+        presets = {
+            "running": ("稼働中", discord.Colour.green(), "🟢"),
+            "starting": ("起動中", discord.Colour.blurple(), "🟦"),
+            "stopping": ("停止処理中", discord.Colour.orange(), "🟧"),
+            "stopped": ("停止済み", discord.Colour.dark_grey(), "⚪"),
+            "restarting": ("再起動中", discord.Colour.gold(), "🟨"),
+            "unknown": ("不明", discord.Colour.red(), "🔴"),
+        }
+        # 辞書に存在しない場合のデフォルト値を決定する処理
+        default = ("不明", discord.Colour.dark_red(), "🔴")
+        # 状態名を小文字にそろえて検索する処理
+        normalized = state.lower() if state else ""
+        return presets.get(normalized, default)
 
     # このメソッドは永続化情報を更新する
     # 呼び出し元: ensure_message, update, reset
