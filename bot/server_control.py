@@ -175,7 +175,13 @@ class ServerController:
         self._logger.info("サーバー起動処理を開始します: command=%s", resolved_command)
         await self._set_transient_state("starting", "running")
         try:
-            result = await self._run_command(resolved_command, "サーバーを起動しました")
+            # 長時間稼働する起動スクリプトを想定し、出力を捕捉せずタイムアウト時の継続を許容する設定で実行する処理
+            result = await self._run_command(
+                resolved_command,
+                "サーバーを起動しました",
+                capture_output=False,
+                background_on_timeout=True,
+            )
         except Exception:
             await self._clear_transient_state()
             raise
@@ -239,7 +245,13 @@ class ServerController:
                 if not resolved_command:
                     await self._clear_transient_state()
                     return ServerActionResult(success=False, message="起動コマンドが未設定のため再起動できません")
-                start_result = await self._run_command(resolved_command, "サーバーを起動しました")
+                # 停止後の再起動でも起動スクリプトは同様の条件で実行し、タイムアウト時の継続を許容する処理
+                start_result = await self._run_command(
+                    resolved_command,
+                    "サーバーを起動しました",
+                    capture_output=False,
+                    background_on_timeout=True,
+                )
                 if not start_result.success:
                     await self._clear_transient_state()
                     return ServerActionResult(
@@ -327,33 +339,58 @@ class ServerController:
 
     # このメソッドは指定されたシェルコマンドを非同期で実行する
     # 呼び出し元: start_server, restart_server
-    # 引数: command は実行コマンド文字列、success_message は成功時に使用する文言
+    # 引数: command は実行コマンド文字列、success_message は成功時に使用する文言、capture_output は標準出力と標準エラーを取得するかどうか、background_on_timeout はタイムアウト時にプロセス継続を許容するかどうか
     # 戻り値: ServerActionResult
-    async def _run_command(self, command: str, success_message: str) -> ServerActionResult:
+    async def _run_command(
+        self,
+        command: str,
+        success_message: str,
+        *,
+        capture_output: bool = True,
+        background_on_timeout: bool = False,
+    ) -> ServerActionResult:
+        # 出力の捕捉有無に応じてパイプ設定を切り替える処理
+        stdout_setting = asyncio.subprocess.PIPE if capture_output else None
+        stderr_setting = asyncio.subprocess.PIPE if capture_output else None
         # コマンドをシェル経由で実行する処理
         # 実行するコマンドをログへ出力する処理
         self._logger.info("外部コマンドを実行します: command=%s", command)
         process = await asyncio.create_subprocess_shell(
             command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stdout=stdout_setting,
+            stderr=stderr_setting,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=self._command_timeout)
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=self._command_timeout,
+            )
         except asyncio.TimeoutError as exc:
+            # タイムアウト時にバックグラウンド継続を許可する場合の処理
+            if background_on_timeout:
+                self._logger.warning("コマンドの終了を待つ前にタイムアウトしましたがプロセスは継続しています: %s", command)
+                return ServerActionResult(
+                    success=True,
+                    message=f"{success_message}（完了確認前にタイムアウトしました）",
+                    detail="コマンドはバックグラウンドで実行を継続している可能性があります。ログを確認してください。",
+                )
             # タイムアウト時にはプロセスを終了させる処理
             process.kill()
-            # タイムアウトが発生したことをログへ出力する処理
-            self._logger.error("外部コマンドがタイムアウトしました: command=%s", command)
+            await process.wait()
             raise ServerControlError("コマンドがタイムアウトしました") from exc
         # プロセス終了コードに応じて結果を判定する処理
         if process.returncode == 0:
-            # コマンド成功をログへ出力する処理
-            self._logger.info("外部コマンドが正常終了しました: command=%s", command)
-            return ServerActionResult(success=True, message=success_message, detail=stdout.decode("utf-8", errors="ignore"))
-        # コマンド失敗をログへ出力する処理
-        self._logger.error("外部コマンドが異常終了しました: command=%s returncode=%s", command, process.returncode)
-        return ServerActionResult(success=False, message="コマンド実行に失敗しました", detail=stderr.decode("utf-8", errors="ignore"))
+            return ServerActionResult(
+                success=True,
+                message=success_message,
+                detail=(stdout.decode("utf-8", errors="ignore") if stdout else ""),
+            )
+        return ServerActionResult(
+            success=False,
+            message="コマンド実行に失敗しました",
+            detail=(stderr.decode("utf-8", errors="ignore") if stderr else ""),
+        )
+
 
     # このメソッドは停止コマンドの送信処理を共通化する
     # 呼び出し元: stop_server, restart_server
