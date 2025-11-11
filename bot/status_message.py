@@ -94,6 +94,23 @@ class StatusMessageManager:
             # 既に削除されている場合は無視する処理
             pass
 
+    # このメソッドは状況チャンネルへ一時的な通知メッセージを投稿する
+    # 呼び出し元: server_commands モジュールのサーバー操作開始通知処理
+    # 引数: content は投稿する本文、delete_after は削除までの秒数
+    # 戻り値: なし
+    async def post_temporary_notice(self, content: str, *, delete_after: float = 60.0) -> None:
+        # 状況メッセージを確実に生成し、対象チャンネルを取得する処理
+        status_message = await self.ensure_message()
+        # 通知を投稿するチャンネルを取得する処理
+        channel = status_message.channel
+        if not isinstance(channel, discord.TextChannel):
+            # テキストチャンネル以外では通知を行わず終了する処理
+            return
+        # 通知メッセージを投稿する処理
+        notice_message = await channel.send(content)
+        # 後始末として一定時間後に削除する非同期タスクを起動する処理
+        asyncio.create_task(self.delete_later(notice_message, delete_after))
+
     # このメソッドはチャンネルオブジェクトを取得する
     # 呼び出し元: ensure_message, update
     # 引数: なし
