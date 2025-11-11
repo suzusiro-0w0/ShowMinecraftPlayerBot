@@ -43,22 +43,29 @@ class StatusUpdaterCog(commands.Cog):
         self._reporter = reporter
         # バックグラウンドタスクを保持する変数
         self._task: Optional[asyncio.Task] = None
+        # 起動時初期化タスクを保持する変数
+        self._startup_task: Optional[asyncio.Task] = None
 
     # このメソッドはCogがロードされた際に呼び出され、監視タスクを開始する
     # 呼び出し元: discord.pyのCogライフサイクル
     # 引数: なし
     # 戻り値: なし
     async def cog_load(self) -> None:
-        # 状況メッセージの存在を確保する処理
-        await self._manager.ensure_message()
-        # バックグラウンドタスクを生成する処理
-        self._task = self._bot.loop.create_task(self._run_loop())
+        # Botの起動完了を待って初期化を行うタスクを生成する処理
+        self._startup_task = self._bot.loop.create_task(self._initialize_after_ready())
 
     # このメソッドはCogがアンロードされる際に呼び出され、監視タスクを停止する
     # 呼び出し元: discord.pyのCogライフサイクル
     # 引数: なし
     # 戻り値: なし
     async def cog_unload(self) -> None:
+        if self._startup_task is not None:
+            # 起動時初期化タスクをキャンセルする処理
+            self._startup_task.cancel()
+            try:
+                await self._startup_task
+            except asyncio.CancelledError:
+                pass
         if self._task is not None:
             # タスクをキャンセルする処理
             self._task.cancel()
@@ -66,6 +73,20 @@ class StatusUpdaterCog(commands.Cog):
                 await self._task
             except asyncio.CancelledError:
                 pass
+
+    # このメソッドはBotの準備完了後に初期化処理を行う
+    # 呼び出し元: cog_load 内で生成した起動時初期化タスク
+    # 引数: なし
+    # 戻り値: なし
+    async def _initialize_after_ready(self) -> None:
+        # Botのログイン完了を待機する処理
+        await self._bot.wait_until_ready()
+        # 状況メッセージの存在を確保する処理
+        await self._manager.ensure_message()
+        # 状況監視ループを開始する処理
+        self._task = self._bot.loop.create_task(self._run_loop())
+        # 初期化タスクの参照を解放する処理
+        self._startup_task = None
 
     # このメソッドはサーバー状態を取得し続けるバックグラウンドタスク
     # 呼び出し元: cog_load 内で生成されたタスク
