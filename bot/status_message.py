@@ -12,6 +12,7 @@ from typing import Iterable, Optional, Tuple
 import discord
 
 from .config import StatusMessageStorage
+from discord.utils import MISSING
 
 
 class StatusMessageManager:
@@ -102,6 +103,8 @@ class StatusMessageManager:
         channel = self._bot.get_channel(self._channel_id)
         if isinstance(channel, discord.TextChannel):
             return channel
+        # APIコールの前にHTTPクライアントのグローバルレートリミット監視イベントを初期化しておく処理
+        await self._ensure_http_global_ratelimit_event()
         try:
             fetched = await self._bot.fetch_channel(self._channel_id)
         except discord.HTTPException:
@@ -109,6 +112,19 @@ class StatusMessageManager:
         if isinstance(fetched, discord.TextChannel):
             return fetched
         return None
+
+    # このメソッドはdiscord.py 2.6系で発生するグローバルレートリミットイベント未初期化問題を回避する
+    # 呼び出し元: _fetch_channel (APIコール直前)
+    # 引数: なし
+    # 戻り値: なし
+    async def _ensure_http_global_ratelimit_event(self) -> None:
+        # HTTPクライアントが保持するイベントオブジェクトを参照する処理
+        global_over = getattr(self._bot.http, "_global_over", None)
+        # sentinelのままの場合は新しいイベントを作成して即座に解放状態にする処理
+        if global_over is MISSING:
+            event = asyncio.Event()
+            event.set()
+            self._bot.http._global_over = event
 
     # このメソッドは永続化されているメッセージを取得する
     # 呼び出し元: ensure_message
