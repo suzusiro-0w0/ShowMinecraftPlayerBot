@@ -211,6 +211,22 @@ class ServerCommandsCog(commands.Cog):
             await prompt.edit(content="操作をキャンセルしました", view=None)
         return bool(view.value)
 
+    # このメソッドはサーバー操作開始をステータスチャンネルへ通知する
+    # 呼び出し元: _execute_action
+    # 引数: interaction はスラッシュコマンドのインタラクション、action_name は操作の表示名
+    # 戻り値: なし
+    async def _post_action_notice(self, interaction: discord.Interaction, action_name: str) -> None:
+        # ユーザーをメンション形式で表現する文字列を作る処理
+        user_label = interaction.user.mention if hasattr(interaction.user, "mention") else interaction.user.name
+        # 投稿する本文を作成する処理
+        notice_text = f"{user_label} さんがサーバーの{action_name}処理を開始しました"
+        try:
+            # 状況チャンネルに一時メッセージとして投稿する処理
+            await self._manager.post_temporary_notice(notice_text, delete_after=60.0)
+        except Exception as exc:  # pylint: disable=broad-except
+            # 通知に失敗した場合でもメイン処理を継続できるようにエラーを記録する処理
+            await self._reporter.notify_error("操作開始メッセージの送信に失敗", exc)
+
     # このメソッドはサーバー操作を実行し、結果をDiscordへ通知する
     # 呼び出し元: 各コマンド実装
     # 引数: interaction はスラッシュコマンドのインタラクション、action_name は操作名、action はServerControllerのメソッド、allowed_states は実行を許可する状態一覧、pending_state と success_state はステータス表示用文字列
@@ -239,6 +255,8 @@ class ServerCommandsCog(commands.Cog):
                 await interaction.edit_original_response(content=f"サーバーが現在{state_label}のため、{action_name}できません")
                 await self._manager.update(status_before.state, status_before.players, note)
                 return
+            # 操作開始をチャンネルに知らせる処理
+            await self._post_action_notice(interaction, action_name)
             # 状況メッセージに実行予定を表示する処理
             await self._manager.update(pending_state, status_before.players, f"{action_name}処理を開始します")
             # ユーザー向けに進行状況を表示する処理
