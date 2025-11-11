@@ -51,8 +51,8 @@ class StatusUpdaterCog(commands.Cog):
     # 引数: なし
     # 戻り値: なし
     async def cog_load(self) -> None:
-        # Botの起動完了を待って初期化を行うタスクを生成する処理
-        self._startup_task = self._bot.loop.create_task(self._initialize_after_ready())
+        # Botの起動完了を待って初期化を行うタスクを生成する処理（asyncio.create_taskを使用してループ非公開化に対応）
+        self._startup_task = asyncio.create_task(self._initialize_after_ready())
 
     # このメソッドはCogがアンロードされる際に呼び出され、監視タスクを停止する
     # 呼び出し元: discord.pyのCogライフサイクル
@@ -83,8 +83,8 @@ class StatusUpdaterCog(commands.Cog):
         await self._bot.wait_until_ready()
         # 状況メッセージの存在を確保する処理
         await self._manager.ensure_message()
-        # 状況監視ループを開始する処理
-        self._task = self._bot.loop.create_task(self._run_loop())
+        # 状況監視ループを開始する処理（asyncio.create_taskでイベントループ取得を抽象化）
+        self._task = asyncio.create_task(self._run_loop())
         # 初期化タスクの参照を解放する処理
         self._startup_task = None
 
