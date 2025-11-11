@@ -21,6 +21,12 @@ class ConsoleStatusDisplay:
     def __init__(self) -> None:
         # 出力先ストリームを保持する変数
         self._stream = sys.stderr
+        # TTYかどうかを判定する関数を取り出すための変数
+        isatty = getattr(self._stream, "isatty", None)
+        # ANSIエスケープシーケンスが利用可能かどうかを保持するフラグ変数
+        self._supports_ansi = bool(isatty()) if callable(isatty) else False
+        # ANSIを利用しない場合に前回出力した内容を保持する変数
+        self._last_plain_output = ""
         # 描画処理の排他制御に利用するロックを保持する変数
         self._lock = threading.Lock()
         # 初期描画済みかどうかを保持するフラグ変数
@@ -177,6 +183,22 @@ class ConsoleStatusDisplay:
     def _render(self) -> None:
         # 現在の情報から表示行を作成する処理
         lines = self._build_lines()
+        # ANSIが利用できない環境向けに簡易表示へ切り替える処理
+        if not self._supports_ansi:
+            # 出力するテキストを一つの塊に連結する処理
+            plain_text = "\n".join(lines)
+            # 前回と同一内容の場合は冗長な出力を避ける処理
+            if plain_text == self._last_plain_output:
+                return
+            # 今回の内容を記録して次回以降の比較に備える処理
+            self._last_plain_output = plain_text
+            # ログ出力などの用途でも読みやすいように改行付きで書き出す処理
+            self._stream.write(f"{plain_text}\n")
+            self._stream.flush()
+            # 初期化フラグと行数情報を更新して処理を終了する
+            self._initialized = True
+            self._reserved_lines = len(lines)
+            return
         # 初回描画時は単純に行を出力して領域を確保する処理
         if not self._initialized:
             for line in lines:
