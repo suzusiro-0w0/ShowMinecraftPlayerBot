@@ -225,20 +225,16 @@ class StatusMessageManager:
         player_list = list(players)
         player_count = len(player_list)
         player_field_value = "\n".join(f"・{name}" for name in player_list) if player_list else "現在参加者はいません"
-        # Embed本体を構築する処理
+        # Embed本体を構築する処理（Embedではオンライン人数とプレイヤー一覧のみを表示する方針）
         embed = discord.Embed(
             title="サーバー状況レポート",
             colour=colour,
             timestamp=datetime.now(timezone.utc),
         )
-        embed.description = (
-            f"{emoji} **状態**: `{state_label}`\n"
-            f"🔤 **状態コード**: `{state or '不明'}`\n"
-            f"👥 **オンライン人数**: `{player_count}` 人"
-        )
+        # Embedの説明文としてオンライン人数だけを掲載する処理
+        embed.description = f"👥 **オンライン人数**: `{player_count}` 人"
+        # プレイヤー一覧フィールドを追加する処理
         embed.add_field(name="👤 プレイヤー一覧", value=player_field_value, inline=False)
-        if note:
-            embed.add_field(name="📝 補足情報", value=note, inline=False)
         embed.set_footer(text="ShowMinecraftPlayerBot")
         return embed
 
@@ -257,12 +253,12 @@ class StatusMessageManager:
         # 表示用テキストを単一行のサマリーとして構築する処理
         # テキスト本文ではサーバー状態を中心に伝え、人数やプレイヤー一覧はEmbedへ任せる文面を組み立てる処理
         summary = f"{emoji} サーバー状態: `{state_label}` (`{state or '不明'}`)"
-        # 補足情報がある場合は文章末尾に追記し、本文でも補足内容を確認できるようにする処理
+        # 補足情報がある場合は改行を挟んで追記し、本文で明瞭に伝える処理
         if note:
-            summary += f" | 📝 {note}"
+            summary += f"\n📝 {note}"
         else:
-            # 補足情報がない場合でもEmbedで詳細を確認できる旨を記載する処理
-            summary += " | ℹ️ 詳細はEmbedを参照"
+            # 補足情報がない場合でもEmbedでオンライン状況を確認できる旨を記載する処理
+            summary += "\nℹ️ Embedでオンライン人数とプレイヤー一覧を確認できます"
         return summary
 
     # このメソッドは状態に応じた表示情報を返す
