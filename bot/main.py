@@ -61,6 +61,8 @@ async def main() -> None:
         start_command=config.commands.start_command,
         restart_command=config.commands.restart_command,
         command_timeout=config.commands.command_timeout,
+        operation_retry_attempts=config.commands.operation_retry_attempts,
+        operation_retry_interval=config.commands.operation_retry_interval,
     )
     # エラーレポーターを初期化する処理
     reporter = ErrorReporter(bot, config.discord.error_channel_id)
