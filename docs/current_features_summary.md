@@ -6,14 +6,14 @@
 - `bot/status_message.py` の `StatusMessageManager` が状況メッセージを単一投稿として管理し、Embed形式で状態・オンライン人数・プレイヤー一覧・補足情報を表示します。
 - メッセージIDは `data/status_message.json` に保存され、Bot再起動後も同じメッセージを更新します。
 - `status_updater` Cog が一定間隔で `ServerController.get_status()` を呼び出し、取得結果をEmbedに反映します。
-- スラッシュコマンドの応答はエフェメラルで提供され、状況チャンネルには状況メッセージのみが残ります。
+- テキストコマンドの応答は対象チャンネルへの返信として提供され、状況チャンネルには状況メッセージが常駐します。
 
 ## サーバー操作コマンド
-- `bot/cogs/server_commands.py` が `/start_server`・`/stop_server`・`/restart_server` の3つのスラッシュコマンドを提供します。
+- `bot/cogs/server_commands.py` が `!start_server`・`!stop_server`・`!restart_server` の3つのテキストコマンドを提供します。
 - いずれのコマンドも管理者ロールIDを保持したユーザーのみ実行でき、実行前に現在状態を確認して不正な操作を拒否します。
 - プレイヤーがオンラインの場合、停止・再起動コマンドは `ConfirmationView` による確認ダイアログで明示的な承認を要求します。
 - 操作結果は `StatusMessageManager.update()` を通じて状況メッセージに反映され、成功時・失敗時それぞれのメッセージを残します。
-- スラッシュコマンドを実行したユーザーと操作内容を状況チャンネルへ一時的に投稿し、一定時間後に自動削除します。
+- コマンドを実行したユーザーと操作内容を状況チャンネルへ一時的に投稿し、一定時間後に自動削除します。
 
 ## サーバー制御ロジック
 - `bot/server_control.py` の `ServerController` が `mcrcon` を介した状態取得と停止指示、外部コマンドによる起動・再起動処理を担います。
