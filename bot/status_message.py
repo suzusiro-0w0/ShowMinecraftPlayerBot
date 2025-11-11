@@ -38,6 +38,14 @@ class StatusMessageManager:
         self._last_state: Optional[str] = stored_data.get("last_known_state")
         # 最後に確認したプレイヤー数を保持する変数
         self._last_player_count: int = stored_data.get("last_player_count", 0)
+        # 直近のサーバー操作を実行した利用者名を保持する変数
+        self._last_operation_actor: Optional[str] = stored_data.get("last_operation_actor")
+        # 直近のサーバー操作の概要文を保持する変数
+        self._last_operation_summary: Optional[str] = stored_data.get("last_operation_summary")
+        # 直近のサーバー操作が成功したかどうかを保持する変数
+        self._last_operation_success: Optional[bool] = stored_data.get("last_operation_success")
+        # 直近のサーバー操作が発生した時刻（ISO8601文字列）を保持する変数
+        self._last_operation_timestamp: Optional[str] = stored_data.get("last_operation_timestamp")
 
     # このメソッドはチャンネル内に状況メッセージが存在するか確認し、なければ作成する
     # 呼び出し元: StatusUpdaterCogのsetup_hookや状態更新処理
@@ -110,6 +118,54 @@ class StatusMessageManager:
         notice_message = await channel.send(content)
         # 後始末として一定時間後に削除する非同期タスクを起動する処理
         asyncio.create_task(self.delete_later(notice_message, delete_after))
+
+    # このメソッドは状況チャンネルから状況メッセージ以外の投稿を削除する
+    # 呼び出し元: bot.cogs.server_commands 内の各コマンド実行前、および起動直後のクリーンアップ処理
+    # 引数: preserve_ids は削除せず保持したいメッセージIDの反復可能オブジェクト
+    # 戻り値: なし
+    async def cleanup_command_messages(self, *, preserve_ids: Optional[Iterable[int]] = None) -> None:
+        # 排他制御のためロックを取得する処理
+        async with self._lock:
+            # チャンネルオブジェクトを取得する処理
+            channel = await self._fetch_channel()
+            if channel is None:
+                return
+            # 保存対象メッセージIDを集合に変換する処理
+            preserved: set[int] = set(preserve_ids or [])
+            # ステータスメッセージ自身は常に保持対象に加える処理
+            if self._message_id is not None:
+                preserved.add(self._message_id)
+            # チャンネル内の履歴を走査し、不要なメッセージを削除する処理
+            async for message in channel.history(limit=None):
+                if message.id in preserved:
+                    continue
+                try:
+                    await message.delete()
+                except discord.HTTPException:
+                    # 権限不足や既に削除済みの場合は無視する処理
+                    continue
+
+    # このメソッドは直近のサーバー操作情報を記録する
+    # 呼び出し元: bot.cogs.server_commands 内の操作実行処理
+    # 引数: actor_name は実行者名、summary は操作概要、success は成功可否、occurred_at は発生時刻（未指定時は現在時刻）
+    # 戻り値: なし
+    def register_operation(
+        self,
+        *,
+        actor_name: str,
+        summary: str,
+        success: bool,
+        occurred_at: Optional[datetime] = None,
+    ) -> None:
+        # 実行者名を保持する処理
+        self._last_operation_actor = actor_name
+        # 操作概要文を保持する処理
+        self._last_operation_summary = summary
+        # 操作結果の成否を保持する処理
+        self._last_operation_success = success
+        # 発生時刻をISO8601文字列として保持する処理
+        timestamp = occurred_at or datetime.now(timezone.utc)
+        self._last_operation_timestamp = timestamp.isoformat()
 
     # このメソッドはチャンネルオブジェクトを取得する
     # 呼び出し元: ensure_message, update
@@ -257,7 +313,45 @@ class StatusMessageManager:
         else:
             # 補足情報がない場合でもEmbedでオンライン人数とプレイヤー名を確認できる旨を記載する処理
             summary += "\nℹ️ Embedタイトルと内容でオンライン状況を確認できます"
+        # 直近操作情報を追記する処理
+        history_line = self._build_last_operation_line()
+        if history_line:
+            summary += f"\n📅 {history_line}"
         return summary
+
+    # このメソッドは最後に実行されたサーバー操作の概要文を構築する
+    # 呼び出し元: _build_text_summary
+    # 引数: なし
+    # 戻り値: 直近操作情報のテキスト（存在しない場合は空文字列）
+    def _build_last_operation_line(self) -> str:
+        # 操作概要が未設定の場合は空文字列を返す処理
+        if not self._last_operation_summary or not self._last_operation_timestamp:
+            return ""
+        # 操作時刻をユーザー向け表示に整形する処理
+        try:
+            occurred_at = datetime.fromisoformat(self._last_operation_timestamp)
+        except ValueError:
+            occurred_at = None
+        if occurred_at is not None and occurred_at.tzinfo is None:
+            # タイムゾーン情報が欠落している場合はUTC扱いで補完する処理
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        # ローカルタイムゾーン情報を取得する処理
+        local_zone = datetime.now().astimezone().tzinfo
+        # 表示用にローカルタイムゾーンへ変換する処理
+        display_time = occurred_at.astimezone(local_zone) if occurred_at and local_zone else occurred_at
+        # 表示用の時刻文字列を決定する処理
+        time_text = display_time.strftime("%Y-%m-%d %H:%M:%S %Z") if display_time else "時刻不明"
+        # 成否に応じた絵文字を選択する処理（成功可否が不明な場合は疑問符を表示）
+        if self._last_operation_success is True:
+            status_icon = "✅"
+        elif self._last_operation_success is False:
+            status_icon = "❌"
+        else:
+            status_icon = "❔"
+        # 実行者名を利用する処理（未設定の場合は"不明"を表示）
+        actor = self._last_operation_actor or "不明"
+        # まとめた文字列を返す処理
+        return f"{status_icon} {time_text} / {actor} / {self._last_operation_summary}"
 
     # このメソッドは状態に応じた表示情報を返す
     # 呼び出し元: _compose_visuals
@@ -289,6 +383,10 @@ class StatusMessageManager:
                 "status_message_id": self._message_id,
                 "last_known_state": state,
                 "last_player_count": player_count,
+                "last_operation_actor": self._last_operation_actor,
+                "last_operation_summary": self._last_operation_summary,
+                "last_operation_success": self._last_operation_success,
+                "last_operation_timestamp": self._last_operation_timestamp,
             }
         )
         self._last_state = state

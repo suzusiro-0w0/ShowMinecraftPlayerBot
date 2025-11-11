@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Awaitable, Callable, Optional, Tuple
 
 import discord
@@ -104,6 +105,8 @@ class ServerCommandsCog(commands.Cog):
         if not self._has_permission(ctx):
             await ctx.reply("このコマンドを実行する権限がありません", mention_author=False)
             return
+        # 新たなコマンド実行前に旧メッセージを整理する処理
+        await self._manager.cleanup_command_messages(preserve_ids=(ctx.message.id,))
         # 進捗表示用のメッセージを送信する処理
         response = await ctx.reply("サーバー起動処理を準備しています…", mention_author=False)
         # 実際のサーバー操作を共通関数に委譲する処理
@@ -128,11 +131,22 @@ class ServerCommandsCog(commands.Cog):
         if not self._has_permission(ctx):
             await ctx.reply("このコマンドを実行する権限がありません", mention_author=False)
             return
+        # 新たなコマンド実行前に旧メッセージを整理する処理
+        await self._manager.cleanup_command_messages(preserve_ids=(ctx.message.id,))
         # 状況確認を案内する初期メッセージを送信する処理
         response = await ctx.reply("プレイヤー状況を確認しています…", mention_author=False)
         # 状況確認と確認ダイアログを実行する処理
         if not await self._confirm_if_players(ctx):
             await response.edit(content="操作をキャンセルしました")
+            # 操作者がキャンセルした場合も履歴へ残す処理
+            # ステータス履歴に記録するために実行者名を取得する処理
+            actor_label = getattr(ctx.author, "display_name", str(ctx.author))
+            self._manager.register_operation(
+                actor_name=actor_label,
+                summary="停止操作をキャンセルしました",
+                success=False,
+                occurred_at=datetime.now(timezone.utc),
+            )
             return
         # 実際のサーバー操作を共通関数に委譲する処理
         await self._execute_action(
@@ -156,11 +170,22 @@ class ServerCommandsCog(commands.Cog):
         if not self._has_permission(ctx):
             await ctx.reply("このコマンドを実行する権限がありません", mention_author=False)
             return
+        # 新たなコマンド実行前に旧メッセージを整理する処理
+        await self._manager.cleanup_command_messages(preserve_ids=(ctx.message.id,))
         # 確認フローの案内メッセージを送信する処理
         response = await ctx.reply("プレイヤー状況を確認しています…", mention_author=False)
         # 状況確認と確認ダイアログを実行する処理
         if not await self._confirm_if_players(ctx):
             await response.edit(content="操作をキャンセルしました")
+            # 操作者がキャンセルした場合も履歴へ残す処理
+            # ステータス履歴に記録するために実行者名を取得する処理
+            actor_label = getattr(ctx.author, "display_name", str(ctx.author))
+            self._manager.register_operation(
+                actor_name=actor_label,
+                summary="再起動操作をキャンセルしました",
+                success=False,
+                occurred_at=datetime.now(timezone.utc),
+            )
             return
         # 実際のサーバー操作を共通関数に委譲する処理
         await self._execute_action(
@@ -237,6 +262,8 @@ class ServerCommandsCog(commands.Cog):
         pending_state: str,
         success_state: str,
     ) -> None:
+        # ステータス履歴へ記録する際に利用する実行者名を抽出する処理
+        actor_label = getattr(ctx.author, "display_name", str(ctx.author))
         try:
             # 現在の状態を確認する処理
             status_before = await self._controller.get_status()
@@ -249,6 +276,13 @@ class ServerCommandsCog(commands.Cog):
                 state_label = self._describe_state(status_before.state)
                 note = f"{action_name}は現在の状態（{state_label}）では実行できません"
                 await message.edit(content=f"サーバーが現在{state_label}のため、{action_name}できません")
+                # 実行不可能だった操作も履歴に記録する処理
+                self._manager.register_operation(
+                    actor_name=actor_label,
+                    summary=note,
+                    success=False,
+                    occurred_at=datetime.now(timezone.utc),
+                )
                 await self._manager.update(status_before.state, status_before.players, note)
                 return
             # 操作開始をチャンネルに知らせる処理
@@ -265,6 +299,13 @@ class ServerCommandsCog(commands.Cog):
             failure_text = f"サーバー{action_name}に失敗しました: {error}"
             await message.edit(content=failure_text)
             status_after = await self._controller.get_status()
+            # 操作失敗を履歴へ記録する処理
+            self._manager.register_operation(
+                actor_name=actor_label,
+                summary=failure_text,
+                success=False,
+                occurred_at=datetime.now(timezone.utc),
+            )
             await self._manager.update(status_after.state, status_after.players, failure_text)
             return
         except Exception as exc:  # pylint: disable=broad-except
@@ -272,6 +313,13 @@ class ServerCommandsCog(commands.Cog):
             failure_text = f"サーバー{action_name}で予期せぬエラが発生しました"
             await message.edit(content=failure_text)
             status_after = await self._controller.get_status()
+            # 予期せぬ失敗を履歴へ記録する処理
+            self._manager.register_operation(
+                actor_name=actor_label,
+                summary=failure_text,
+                success=False,
+                occurred_at=datetime.now(timezone.utc),
+            )
             await self._manager.update(status_after.state, status_after.players, failure_text)
             return
         # 結果に応じてメッセージを整形する処理
@@ -279,6 +327,13 @@ class ServerCommandsCog(commands.Cog):
             await message.edit(content=result.message)
             status_after = await self._controller.get_status()
             final_state = status_after.state if status_after.state != "unknown" else success_state
+            # 操作成功を履歴へ記録する処理
+            self._manager.register_operation(
+                actor_name=actor_label,
+                summary=result.message,
+                success=True,
+                occurred_at=datetime.now(timezone.utc),
+            )
             await self._manager.update(final_state, status_after.players, result.message)
         else:
             detail = f" 詳細: {result.detail}" if result.detail else ""
@@ -290,6 +345,13 @@ class ServerCommandsCog(commands.Cog):
             )
             await message.edit(content=failure_text)
             status_after = await self._controller.get_status()
+            # 操作失敗を履歴へ記録する処理
+            self._manager.register_operation(
+                actor_name=actor_label,
+                summary=failure_text,
+                success=False,
+                occurred_at=datetime.now(timezone.utc),
+            )
             await self._manager.update(status_after.state, status_after.players, failure_text)
 
     # このメソッドは状態コードを日本語の説明文へ変換する
