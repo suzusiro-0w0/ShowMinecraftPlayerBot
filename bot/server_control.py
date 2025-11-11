@@ -89,6 +89,12 @@ class ServerController:
         # RCON接続およびレスポンス解析を行いサーバー状態を取得する処理
         # 一時状態と期待状態を読み出す処理
         transient_state, expected_state = await self._get_transient_state()
+        # 状態取得を開始したことをログへ出力する処理
+        self._logger.info(
+            "サーバー状態取得を開始しました: transient_state=%s expected_state=%s",
+            transient_state,
+            expected_state,
+        )
         try:
             response = await asyncio.to_thread(self._execute_rcon_list)
             players = self._parse_player_list(response)
@@ -125,6 +131,13 @@ class ServerController:
                 display_state = actual_state
             else:
                 display_state = transient_state
+        # 状態取得結果をログへ出力する処理
+        self._logger.info(
+            "サーバー状態取得が完了しました: actual_state=%s display_state=%s players=%d",
+            actual_state,
+            display_state,
+            len(player_names),
+        )
         return ServerStatus(state=display_state, players=player_names, message=message)
 
     # このメソッドは接続失敗メッセージを重複なくログに出力する
@@ -158,6 +171,8 @@ class ServerController:
             return ServerActionResult(success=False, message="起動コマンドが設定されていません")
         # 設定されたコマンドを絶対パスへ変換する処理
         resolved_command = self._resolve_start_command(self._start_command)
+        # 起動処理を開始したことをログへ出力する処理
+        self._logger.info("サーバー起動処理を開始します: command=%s", resolved_command)
         await self._set_transient_state("starting", "running")
         try:
             result = await self._run_command(resolved_command, "サーバーを起動しました")
@@ -166,6 +181,11 @@ class ServerController:
             raise
         if not result.success:
             await self._clear_transient_state()
+            # 起動に失敗したことをログへ出力する処理
+            self._logger.error("サーバー起動に失敗しました: detail=%s", result.detail)
+        else:
+            # 起動が成功したことをログへ出力する処理
+            self._logger.info("サーバー起動に成功しました")
         return result
 
     # このメソッドはサーバーを停止する
@@ -174,6 +194,8 @@ class ServerController:
     # 戻り値: ServerActionResult
     async def stop_server(self) -> ServerActionResult:
         # RCON経由でstopコマンドを送信する処理
+        # 停止処理を開始したことをログへ出力する処理
+        self._logger.info("サーバー停止処理を開始します")
         await self._set_transient_state("stopping", "stopped")
         try:
             result = await self._stop_via_rcon()
@@ -182,6 +204,11 @@ class ServerController:
             raise
         if not result.success:
             await self._clear_transient_state()
+            # 停止に失敗したことをログへ出力する処理
+            self._logger.error("サーバー停止に失敗しました: detail=%s", result.detail)
+        else:
+            # 停止が成功したことをログへ出力する処理
+            self._logger.info("サーバー停止要求を送信しました")
         return result
 
     # このメソッドはサーバーを再起動する
@@ -189,11 +216,17 @@ class ServerController:
     # 引数: なし
     # 戻り値: ServerActionResult
     async def restart_server(self) -> ServerActionResult:
+        # 再起動処理を開始したことをログへ出力する処理
+        self._logger.info("サーバー再起動処理を開始します")
         await self._set_transient_state("restarting", "running")
         try:
             if self._restart_command:
+                # 再起動コマンドを利用することをログへ出力する処理
+                self._logger.info("再起動コマンドを実行します: command=%s", self._restart_command)
                 result = await self._run_command(self._restart_command, "サーバーを再起動しました")
             else:
+                # 再起動コマンドが設定されていないため停止と起動を組み合わせることをログへ出力する処理
+                self._logger.info("停止と起動を組み合わせて再起動を実施します")
                 stop_result = await self._stop_via_rcon()
                 if not stop_result.success:
                     await self._clear_transient_state()
@@ -220,6 +253,11 @@ class ServerController:
             raise
         if not result.success:
             await self._clear_transient_state()
+            # 再起動に失敗したことをログへ出力する処理
+            self._logger.error("サーバー再起動に失敗しました: detail=%s", result.detail)
+        else:
+            # 再起動が成功したことをログへ出力する処理
+            self._logger.info("サーバー再起動に成功しました")
         return result
 
     # このメソッドは一時状態を設定する
@@ -230,6 +268,8 @@ class ServerController:
         async with self._state_lock:
             self._transient_state = state
             self._expected_state = expected
+            # 一時状態の設定内容をログへ出力する処理
+            self._logger.debug("一時状態を設定しました: state=%s expected=%s", state, expected)
 
     # このメソッドは一時状態を消去する
     # 呼び出し元: get_status, 各操作メソッドの例外処理
@@ -239,6 +279,8 @@ class ServerController:
         async with self._state_lock:
             self._transient_state = None
             self._expected_state = None
+            # 一時状態を解除したことをログへ出力する処理
+            self._logger.debug("一時状態を解除しました")
 
     # このメソッドは一時状態と期待状態を取得する
     # 呼び出し元: get_status
@@ -289,6 +331,8 @@ class ServerController:
     # 戻り値: ServerActionResult
     async def _run_command(self, command: str, success_message: str) -> ServerActionResult:
         # コマンドをシェル経由で実行する処理
+        # 実行するコマンドをログへ出力する処理
+        self._logger.info("外部コマンドを実行します: command=%s", command)
         process = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
@@ -299,10 +343,16 @@ class ServerController:
         except asyncio.TimeoutError as exc:
             # タイムアウト時にはプロセスを終了させる処理
             process.kill()
+            # タイムアウトが発生したことをログへ出力する処理
+            self._logger.error("外部コマンドがタイムアウトしました: command=%s", command)
             raise ServerControlError("コマンドがタイムアウトしました") from exc
         # プロセス終了コードに応じて結果を判定する処理
         if process.returncode == 0:
+            # コマンド成功をログへ出力する処理
+            self._logger.info("外部コマンドが正常終了しました: command=%s", command)
             return ServerActionResult(success=True, message=success_message, detail=stdout.decode("utf-8", errors="ignore"))
+        # コマンド失敗をログへ出力する処理
+        self._logger.error("外部コマンドが異常終了しました: command=%s returncode=%s", command, process.returncode)
         return ServerActionResult(success=False, message="コマンド実行に失敗しました", detail=stderr.decode("utf-8", errors="ignore"))
 
     # このメソッドは停止コマンドの送信処理を共通化する
@@ -311,6 +361,8 @@ class ServerController:
     # 戻り値: ServerActionResult
     async def _stop_via_rcon(self) -> ServerActionResult:
         try:
+            # RCON経由で停止コマンドを送信することをログへ出力する処理
+            self._logger.info("RCON経由で停止コマンドを送信します")
             response = await asyncio.to_thread(self._execute_rcon_command, "stop")
         except Exception as exc:  # pylint: disable=broad-except
             self._logger.error("RCON経由での停止に失敗しました", exc_info=exc)
@@ -319,6 +371,8 @@ class ServerController:
                 message="RCON経由での停止に失敗しました",
                 detail=str(exc),
             )
+        # RCON経由の停止指示が成功したことをログへ出力する処理
+        self._logger.info("RCON経由の停止指示を送信しました")
         return ServerActionResult(
             success=True,
             message="RCON経由でサーバー停止を指示しました",
