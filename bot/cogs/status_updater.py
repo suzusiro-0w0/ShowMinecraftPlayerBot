@@ -116,10 +116,9 @@ class StatusUpdaterCog(commands.Cog):
                 # 状態取得前にログを出力する処理
                 self._logger.debug("サーバー状態の取得処理を実行します")
                 status = await self._controller.get_status()
-                # 状況メッセージを更新する処理
-                # 更新開始をログへ出力する処理
-                self._logger.info(
-                    "状況メッセージを更新します: state=%s players=%d",
+                # 状況メッセージを更新する処理（詳細ログはコンソールヘッダーで確認できるためデバッグレベルに抑える）
+                self._logger.debug(
+                    "状況メッセージ更新処理を実行します: state=%s players=%d",
                     status.state,
                     len(status.players),
                 )

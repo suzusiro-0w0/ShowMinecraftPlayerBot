@@ -1,6 +1,6 @@
 """bot.cogs.server_commands
 ==========================
-サーバー起動・停止・再起動のスラッシュコマンドを提供するCog。
+サーバー起動・停止・再起動のプレフィックスコマンド（!コマンド）を提供するCog。
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ from typing import Awaitable, Callable, Optional, Tuple
 
 import discord
 from discord.ext import commands
-from discord import app_commands
 
 from ..server_control import ServerActionResult, ServerControlError, ServerController
 from ..status_message import StatusMessageManager
@@ -95,21 +94,22 @@ class ServerCommandsCog(commands.Cog):
         self._admin_role_id = admin_role_id
 
     # このメソッドはサーバー起動コマンドを実装する
-    # 呼び出し元: Discord上で/start_serverスラッシュコマンドが発行された際
-    # 引数: interaction はスラッシュコマンドのインタラクション
+    # 呼び出し元: Discord上で!start_serverコマンドが発行された際
+    # 引数: ctx はコマンド実行コンテキスト
     # 戻り値: なし
-    @app_commands.command(name="start_server", description="Minecraftサーバーを起動します")
-    @app_commands.guild_only()
-    async def start_server(self, interaction: discord.Interaction) -> None:
+    @commands.command(name="start_server", help="Minecraftサーバーを起動します")
+    @commands.guild_only()
+    async def start_server(self, ctx: commands.Context) -> None:
         # 権限を確認して不足していれば即座に応答する処理
-        if not self._has_permission(interaction):
-            await interaction.response.send_message("このコマンドを実行する権限がありません", ephemeral=True)
+        if not self._has_permission(ctx):
+            await ctx.reply("このコマンドを実行する権限がありません", mention_author=False)
             return
-        # 長時間処理に備えて応答を保留し、進捗メッセージを後で送信する準備をする処理
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        # 進捗表示用のメッセージを送信する処理
+        response = await ctx.reply("サーバー起動処理を準備しています…", mention_author=False)
         # 実際のサーバー操作を共通関数に委譲する処理
         await self._execute_action(
-            interaction,
+            ctx,
+            response,
             "起動",
             self._controller.start_server,
             allowed_states=("stopped",),
@@ -118,26 +118,26 @@ class ServerCommandsCog(commands.Cog):
         )
 
     # このメソッドはサーバー停止コマンドを実装する
-    # 呼び出し元: Discord上で/stop_serverスラッシュコマンドが発行された際
-    # 引数: interaction はスラッシュコマンドのインタラクション
+    # 呼び出し元: Discord上で!stop_serverコマンドが発行された際
+    # 引数: ctx はコマンド実行コンテキスト
     # 戻り値: なし
-    @app_commands.command(name="stop_server", description="Minecraftサーバーを停止します")
-    @app_commands.guild_only()
-    async def stop_server(self, interaction: discord.Interaction) -> None:
+    @commands.command(name="stop_server", help="Minecraftサーバーを停止します")
+    @commands.guild_only()
+    async def stop_server(self, ctx: commands.Context) -> None:
         # 権限を確認して不足していれば即座に応答する処理
-        if not self._has_permission(interaction):
-            await interaction.response.send_message("このコマンドを実行する権限がありません", ephemeral=True)
+        if not self._has_permission(ctx):
+            await ctx.reply("このコマンドを実行する権限がありません", mention_author=False)
             return
-        # 長時間処理に備えて応答を保留し、後続の確認フローを準備する処理
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        # 状況確認を案内する初期メッセージを送信する処理
+        response = await ctx.reply("プレイヤー状況を確認しています…", mention_author=False)
         # 状況確認と確認ダイアログを実行する処理
-        await interaction.edit_original_response(content="プレイヤー状況を確認しています…")
-        if not await self._confirm_if_players(interaction):
-            await interaction.edit_original_response(content="操作をキャンセルしました")
+        if not await self._confirm_if_players(ctx):
+            await response.edit(content="操作をキャンセルしました")
             return
         # 実際のサーバー操作を共通関数に委譲する処理
         await self._execute_action(
-            interaction,
+            ctx,
+            response,
             "停止",
             self._controller.stop_server,
             allowed_states=("running",),
@@ -146,26 +146,26 @@ class ServerCommandsCog(commands.Cog):
         )
 
     # このメソッドはサーバー再起動コマンドを実装する
-    # 呼び出し元: Discord上で/restart_serverスラッシュコマンドが発行された際
-    # 引数: interaction はスラッシュコマンドのインタラクション
+    # 呼び出し元: Discord上で!restart_serverコマンドが発行された際
+    # 引数: ctx はコマンド実行コンテキスト
     # 戻り値: なし
-    @app_commands.command(name="restart_server", description="Minecraftサーバーを再起動します")
-    @app_commands.guild_only()
-    async def restart_server(self, interaction: discord.Interaction) -> None:
+    @commands.command(name="restart_server", help="Minecraftサーバーを再起動します")
+    @commands.guild_only()
+    async def restart_server(self, ctx: commands.Context) -> None:
         # 権限を確認して不足していれば即座に応答する処理
-        if not self._has_permission(interaction):
-            await interaction.response.send_message("このコマンドを実行する権限がありません", ephemeral=True)
+        if not self._has_permission(ctx):
+            await ctx.reply("このコマンドを実行する権限がありません", mention_author=False)
             return
-        # 長時間処理に備えて応答を保留し、後続の確認フローを準備する処理
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        # 確認フローの案内メッセージを送信する処理
+        response = await ctx.reply("プレイヤー状況を確認しています…", mention_author=False)
         # 状況確認と確認ダイアログを実行する処理
-        await interaction.edit_original_response(content="プレイヤー状況を確認しています…")
-        if not await self._confirm_if_players(interaction):
-            await interaction.edit_original_response(content="操作をキャンセルしました")
+        if not await self._confirm_if_players(ctx):
+            await response.edit(content="操作をキャンセルしました")
             return
         # 実際のサーバー操作を共通関数に委譲する処理
         await self._execute_action(
-            interaction,
+            ctx,
+            response,
             "再起動",
             self._controller.restart_server,
             allowed_states=("running",),
@@ -175,11 +175,11 @@ class ServerCommandsCog(commands.Cog):
 
     # このメソッドは権限を確認する
     # 呼び出し元: 各コマンド処理の先頭
-    # 引数: interaction はスラッシュコマンドのインタラクション
+    # 引数: ctx はコマンド実行コンテキスト
     # 戻り値: bool
-    def _has_permission(self, interaction: discord.Interaction) -> bool:
+    def _has_permission(self, ctx: commands.Context) -> bool:
         # 付与されたロールの中に管理者ロールIDが含まれるかを判定する処理
-        member = interaction.user
+        member = ctx.author
         if not isinstance(member, discord.Member):
             # DMなどロール情報が取得できない場合は権限なしとする処理
             return False
@@ -187,22 +187,17 @@ class ServerCommandsCog(commands.Cog):
 
     # このメソッドはサーバーにプレイヤーがいる場合に確認ダイアログを提示する
     # 呼び出し元: stop_server, restart_server
-    # 引数: interaction はスラッシュコマンドのインタラクション
+    # 引数: ctx はコマンド実行コンテキスト
     # 戻り値: bool
-    async def _confirm_if_players(self, interaction: discord.Interaction) -> bool:
+    async def _confirm_if_players(self, ctx: commands.Context) -> bool:
         # 現在のプレイヤー一覧を取得する処理
         status = await self._controller.get_status()
         # プレイヤーが存在しない場合はそのまま実行する処理
         if not status.players:
             return True
         # 実行者に確認ダイアログを提示する処理
-        view = ConfirmationView(interaction.user.id)
-        prompt = await interaction.followup.send(
-            "プレイヤーがオンラインです。操作を続行しますか？",
-            view=view,
-            ephemeral=True,
-            wait=True,
-        )
+        view = ConfirmationView(ctx.author.id)
+        prompt = await ctx.send("プレイヤーがオンラインです。操作を続行しますか？", view=view)
         await view.wait()
         # ボタンを無効化し、最終結果をユーザーへ通知する処理
         if view.value:
@@ -213,11 +208,11 @@ class ServerCommandsCog(commands.Cog):
 
     # このメソッドはサーバー操作開始をステータスチャンネルへ通知する
     # 呼び出し元: _execute_action
-    # 引数: interaction はスラッシュコマンドのインタラクション、action_name は操作の表示名
+    # 引数: ctx はコマンド実行コンテキスト、action_name は操作の表示名
     # 戻り値: なし
-    async def _post_action_notice(self, interaction: discord.Interaction, action_name: str) -> None:
+    async def _post_action_notice(self, ctx: commands.Context, action_name: str) -> None:
         # ユーザーをメンション形式で表現する文字列を作る処理
-        user_label = interaction.user.mention if hasattr(interaction.user, "mention") else interaction.user.name
+        user_label = ctx.author.mention if hasattr(ctx.author, "mention") else ctx.author.name
         # 投稿する本文を作成する処理
         notice_text = f"{user_label} さんがサーバーの{action_name}処理を開始しました"
         try:
@@ -229,11 +224,12 @@ class ServerCommandsCog(commands.Cog):
 
     # このメソッドはサーバー操作を実行し、結果をDiscordへ通知する
     # 呼び出し元: 各コマンド実装
-    # 引数: interaction はスラッシュコマンドのインタラクション、action_name は操作名、action はServerControllerのメソッド、allowed_states は実行を許可する状態一覧、pending_state と success_state はステータス表示用文字列
+    # 引数: ctx はコマンド実行コンテキスト、message は進行状況表示用メッセージ、action_name は操作名、action はServerControllerのメソッド、allowed_states は実行を許可する状態一覧、pending_state と success_state はステータス表示用文字列
     # 戻り値: なし
     async def _execute_action(
         self,
-        interaction: discord.Interaction,
+        ctx: commands.Context,
+        message: discord.Message,
         action_name: str,
         action: Callable[[], Awaitable[ServerActionResult]],
         *,
@@ -252,35 +248,35 @@ class ServerCommandsCog(commands.Cog):
             if state_key not in allowed_normalized:
                 state_label = self._describe_state(status_before.state)
                 note = f"{action_name}は現在の状態（{state_label}）では実行できません"
-                await interaction.edit_original_response(content=f"サーバーが現在{state_label}のため、{action_name}できません")
+                await message.edit(content=f"サーバーが現在{state_label}のため、{action_name}できません")
                 await self._manager.update(status_before.state, status_before.players, note)
                 return
             # 操作開始をチャンネルに知らせる処理
-            await self._post_action_notice(interaction, action_name)
+            await self._post_action_notice(ctx, action_name)
             # 状況メッセージに実行予定を表示する処理
             await self._manager.update(pending_state, status_before.players, f"{action_name}処理を開始します")
             # ユーザー向けに進行状況を表示する処理
-            await interaction.edit_original_response(content=f"サーバーの{action_name}処理を実行しています…")
+            await message.edit(content=f"サーバーの{action_name}処理を実行しています…")
             # サーバー操作を実行する処理
             result = await action()
         except ServerControlError as error:
             # エラーを管理者へ通知する処理
             await self._reporter.notify_error(f"サーバー{action_name}に失敗", error)
             failure_text = f"サーバー{action_name}に失敗しました: {error}"
-            await interaction.edit_original_response(content=failure_text)
+            await message.edit(content=failure_text)
             status_after = await self._controller.get_status()
             await self._manager.update(status_after.state, status_after.players, failure_text)
             return
         except Exception as exc:  # pylint: disable=broad-except
             await self._reporter.notify_error(f"サーバー{action_name}で予期せぬエラー", exc)
-            failure_text = f"サーバー{action_name}で予期せぬエラーが発生しました"
-            await interaction.edit_original_response(content=failure_text)
+            failure_text = f"サーバー{action_name}で予期せぬエラが発生しました"
+            await message.edit(content=failure_text)
             status_after = await self._controller.get_status()
             await self._manager.update(status_after.state, status_after.players, failure_text)
             return
         # 結果に応じてメッセージを整形する処理
         if result.success:
-            await interaction.edit_original_response(content=result.message)
+            await message.edit(content=result.message)
             status_after = await self._controller.get_status()
             final_state = status_after.state if status_after.state != "unknown" else success_state
             await self._manager.update(final_state, status_after.players, result.message)
@@ -292,7 +288,7 @@ class ServerCommandsCog(commands.Cog):
                 ServerControlError(failure_text),
                 context=result.detail,
             )
-            await interaction.edit_original_response(content=failure_text)
+            await message.edit(content=failure_text)
             status_after = await self._controller.get_status()
             await self._manager.update(status_after.state, status_after.players, failure_text)
 

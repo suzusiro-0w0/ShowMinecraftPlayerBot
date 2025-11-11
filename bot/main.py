@@ -36,22 +36,8 @@ async def main() -> None:
     # Discord Intentsを構築する処理
     intents = discord.Intents.default()
     intents.message_content = True
-    # Botインスタンスを生成する処理
+    # Botインスタンスを生成する処理（!プレフィックスのテキストコマンドを利用）
     bot = commands.Bot(command_prefix="!", intents=intents)
-    # スラッシュコマンド同期済みかどうかを保持するフラグ変数
-    bot.tree_synced = False  # type: ignore[attr-defined]
-
-    # Botが起動完了した際にスラッシュコマンドを同期するイベントハンドラー
-    # 呼び出し元: Discord.pyの内部イベントループ
-    # 引数: なし
-    # 戻り値: なし
-    @bot.event
-    async def on_ready() -> None:
-        # 既に同期済みの場合は処理を省略する分岐
-        if getattr(bot, "tree_synced", False):
-            return
-        await bot.tree.sync()
-        bot.tree_synced = True  # type: ignore[attr-defined]
     # 永続化ファイルのストレージを用意する処理
     storage = StatusMessageStorage(Path("data/status_message.json"))
     # 状況メッセージ管理クラスを初期化する処理
