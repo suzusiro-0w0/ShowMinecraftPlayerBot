@@ -237,19 +237,16 @@ class StatusMessageManager:
         players: Iterable[str],
         note: Optional[str],
     ) -> str:
-        # 表示用テキストを行単位で構築する処理
-        player_list = list(players)
-        lines = [
-            f"{emoji} **サーバー状態**: `{state_label}` (`{state or '不明'}`)",
-            f"👥 **オンライン人数**: `{len(player_list)}` 人",
-        ]
-        if player_list:
-            lines.append("👤 **参加プレイヤー**: " + ", ".join(player_list))
-        else:
-            lines.append("👤 **参加プレイヤー**: なし")
+        # 表示用テキストを単一行のサマリーとして構築する処理
+        # テキスト本文ではサーバー状態を中心に伝え、人数やプレイヤー一覧はEmbedへ任せる文面を組み立てる処理
+        summary = f"{emoji} サーバー状態: `{state_label}` (`{state or '不明'}`)"
+        # 補足情報がある場合は文章末尾に追記し、本文でも補足内容を確認できるようにする処理
         if note:
-            lines.append(f"📝 **補足**: {note}")
-        return "\n".join(lines)
+            summary += f" | 📝 {note}"
+        else:
+            # 補足情報がない場合でもEmbedで詳細を確認できる旨を記載する処理
+            summary += " | ℹ️ 詳細はEmbedを参照"
+        return summary
 
     # このメソッドは状態に応じた表示情報を返す
     # 呼び出し元: _compose_visuals
