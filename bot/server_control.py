@@ -13,6 +13,8 @@ from typing import List, Optional, Tuple
 
 from mcrcon import MCRcon
 
+from .utils.console_status import console_status_display
+
 
 class ServerControlError(Exception):
     """サーバー制御に関する例外を表すクラス"""
@@ -131,6 +133,15 @@ class ServerController:
                 display_state = actual_state
             else:
                 display_state = transient_state
+        # 取得した状態をコンソールサマリーへ反映する処理
+        console_status_display.update_status(
+            actual_state=actual_state,
+            display_state=display_state,
+            players=player_names,
+            message=message,
+            transient_state=transient_state,
+            expected_state=expected_state,
+        )
         # 状態取得結果をログへ出力する処理
         self._logger.info(
             "サーバー状態取得が完了しました: actual_state=%s display_state=%s players=%d",
@@ -174,6 +185,12 @@ class ServerController:
         # 起動処理を開始したことをログへ出力する処理
         self._logger.info("サーバー起動処理を開始します: command=%s", resolved_command)
         await self._set_transient_state("starting", "running")
+        # 起動要求中であることをコンソールサマリーへ通知する処理
+        console_status_display.update_transient(
+            transient_state="starting",
+            expected_state="running",
+            note="サーバー起動コマンドを実行しています",
+        )
         try:
             # 長時間稼働する起動スクリプトを想定し、出力を捕捉せずタイムアウト時の継続を許容する設定で実行する処理
             result = await self._run_command(
@@ -203,6 +220,12 @@ class ServerController:
         # 停止処理を開始したことをログへ出力する処理
         self._logger.info("サーバー停止処理を開始します")
         await self._set_transient_state("stopping", "stopped")
+        # 停止要求中であることをコンソールサマリーへ通知する処理
+        console_status_display.update_transient(
+            transient_state="stopping",
+            expected_state="stopped",
+            note="RCON経由で停止コマンドを送信しています",
+        )
         try:
             result = await self._stop_via_rcon()
         except Exception:
@@ -225,6 +248,12 @@ class ServerController:
         # 再起動処理を開始したことをログへ出力する処理
         self._logger.info("サーバー再起動処理を開始します")
         await self._set_transient_state("restarting", "running")
+        # 再起動処理中であることをコンソールサマリーへ通知する処理
+        console_status_display.update_transient(
+            transient_state="restarting",
+            expected_state="running",
+            note="再起動処理を実行しています",
+        )
         try:
             if self._restart_command:
                 # 再起動コマンドを利用することをログへ出力する処理
@@ -289,10 +318,19 @@ class ServerController:
     # 戻り値: なし
     async def _clear_transient_state(self) -> None:
         async with self._state_lock:
+            # 解除前に一時状態が設定されていたかを判定する処理
+            had_transient = self._transient_state is not None or self._expected_state is not None
             self._transient_state = None
             self._expected_state = None
             # 一時状態を解除したことをログへ出力する処理
             self._logger.debug("一時状態を解除しました")
+        if had_transient:
+            # 一時状態解除をコンソールサマリーへ反映する処理
+            console_status_display.update_transient(
+                transient_state=None,
+                expected_state=None,
+                note="一時状態を解除しました",
+            )
 
     # このメソッドは一時状態と期待状態を取得する
     # 呼び出し元: get_status

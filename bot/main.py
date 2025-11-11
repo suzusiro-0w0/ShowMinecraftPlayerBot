@@ -18,6 +18,7 @@ from .cogs.status_updater import StatusUpdaterCog
 from .server_control import ServerController
 from .status_message import StatusMessageManager
 from .utils.error_reporter import ErrorReporter
+from .utils.console_status import console_status_display
 
 
 # この関数はBotを起動するための非同期エントリポイント
@@ -25,6 +26,8 @@ from .utils.error_reporter import ErrorReporter
 # 引数: なし
 # 戻り値: なし
 async def main() -> None:
+    # コンソールサマリーの初期表示を行う処理
+    console_status_display.initialize()
     # 設定ファイルを読み込む処理
     loader = ConfigLoader()
     config = loader.load()
