@@ -35,3 +35,4 @@ venv/
 *.swp
 # ユーザー固有の設定ファイルを無視
 config.ini
+data/status_message.json
