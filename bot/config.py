@@ -54,6 +54,10 @@ class CommandSection:
     restart_command: str
     # 外部コマンド実行のタイムアウト秒数を保持する変数
     command_timeout: int
+    # サーバー操作完了を確認する際の最大試行回数を保持する変数
+    operation_retry_attempts: int
+    # 各試行の間隔秒数を保持する変数
+    operation_retry_interval: int
 
 
 @dataclass
@@ -185,6 +189,8 @@ class ConfigLoader:
             start_command=section.get("start_command", ""),
             restart_command=section.get("restart_command", ""),
             command_timeout=section.getint("command_timeout", 60),
+            operation_retry_attempts=section.getint("operation_retry_attempts", 3),
+            operation_retry_interval=section.getint("operation_retry_interval", 10),
         )
 
     # このメソッドはloggingセクションの値を読み込む
@@ -220,6 +226,8 @@ class ConfigLoader:
                     "start_command": "",
                     "restart_command": "",
                     "command_timeout": "60",
+                    "operation_retry_attempts": "3",
+                    "operation_retry_interval": "10",
                 },
                 "logging": {"level": "INFO"},
             }

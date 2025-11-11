@@ -287,6 +287,11 @@ class ServerCommandsCog(commands.Cog):
         else:
             detail = f" 詳細: {result.detail}" if result.detail else ""
             failure_text = f"サーバー{action_name}に失敗しました: {result.message}{detail}"
+            await self._reporter.notify_error(
+                f"サーバー{action_name}に失敗",
+                ServerControlError(failure_text),
+                context=result.detail,
+            )
             await interaction.edit_original_response(content=failure_text)
             status_after = await self._controller.get_status()
             await self._manager.update(status_after.state, status_after.players, failure_text)
