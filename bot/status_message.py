@@ -64,9 +64,9 @@ class StatusMessageManager:
                 raise RuntimeError("指定されたステータスチャンネルが見つかりません")
             message = await self._get_or_create_message_locked(channel)
             player_list = list(players)
-            # Embedを生成してメッセージを更新する処理
-            embed = self._build_embed(state, player_list, note)
-            await message.edit(embed=embed)
+            # メッセージ本文とEmbedを整形する処理
+            content, embed = self._compose_visuals(state, player_list, note)
+            await message.edit(content=content, embed=embed)
             # 保存している状態情報を更新する処理
             self._update_storage(state=state, player_count=len(player_list))
 
@@ -149,38 +149,94 @@ class StatusMessageManager:
             return message
         # 見つからない場合はチャンネルを整理して新規作成する処理
         await self._clear_channel(channel)
-        message = await channel.send(embed=self._build_embed("unknown", [], "初期化中"))
+        content, embed = self._compose_visuals("unknown", [], "初期化中")
+        message = await channel.send(content=content, embed=embed)
         self._message_id = message.id
         self._update_storage(state="unknown", player_count=0)
         return message
 
-    # このメソッドはEmbedオブジェクトを構築する
-    # 呼び出し元: ensure_message, update
+    # このメソッドは状況表示用テキストとEmbedをまとめて構築する
+    # 呼び出し元: update, _get_or_create_message_locked
     # 引数: state は状態文字列、players はプレイヤー名リスト、note は補足文
-    # 戻り値: discord.Embed
-    def _build_embed(self, state: str, players: Iterable[str], note: Optional[str]) -> discord.Embed:
-        # 現在の状態に応じた表示名・色・アイコンを取得する処理
+    # 戻り値: (本文テキスト, Embed) のタプル
+    def _compose_visuals(
+        self,
+        state: str,
+        players: Iterable[str],
+        note: Optional[str],
+    ) -> Tuple[str, discord.Embed]:
+        # 状態に応じた表示設定を取得する処理
         state_label, colour, emoji = self._resolve_state_appearance(state)
+        # プレイヤー一覧をリスト化する処理
+        player_list = list(players)
+        # 状況をテキストでまとめる処理
+        content = self._build_text_summary(state, state_label, emoji, player_list, note)
+        # Embedを構築する処理
+        embed = self._build_embed(state, state_label, colour, emoji, player_list, note)
+        return content, embed
+
+    # このメソッドはEmbedオブジェクトを構築する
+    # 呼び出し元: _compose_visuals
+    # 引数: state は状態文字列、state_label は表示用名称、colour はEmbed色、emoji は状態絵文字、players はプレイヤー名リスト、note は補足文
+    # 戻り値: discord.Embed
+    def _build_embed(
+        self,
+        state: str,
+        state_label: str,
+        colour: discord.Colour,
+        emoji: str,
+        players: Iterable[str],
+        note: Optional[str],
+    ) -> discord.Embed:
         # プレイヤー一覧と人数を整形する処理
         player_list = list(players)
         player_count = len(player_list)
-        player_field_value = "\n".join(f"・{name}" for name in player_list) if player_list else "なし"
+        player_field_value = "\n".join(f"・{name}" for name in player_list) if player_list else "現在参加者はいません"
         # Embed本体を構築する処理
         embed = discord.Embed(
-            title=f"{emoji} サーバー状態: {state_label}",
+            title="サーバー状況レポート",
             colour=colour,
             timestamp=datetime.now(timezone.utc),
         )
-        embed.add_field(name="状態コード", value=state or "不明", inline=True)
-        embed.add_field(name="オンライン人数", value=f"{player_count} 人", inline=True)
-        embed.add_field(name="プレイヤー一覧", value=player_field_value, inline=False)
+        embed.description = (
+            f"{emoji} **状態**: `{state_label}`\n"
+            f"🔤 **状態コード**: `{state or '不明'}`\n"
+            f"👥 **オンライン人数**: `{player_count}` 人"
+        )
+        embed.add_field(name="👤 プレイヤー一覧", value=player_field_value, inline=False)
         if note:
-            embed.add_field(name="補足情報", value=note, inline=False)
+            embed.add_field(name="📝 補足情報", value=note, inline=False)
         embed.set_footer(text="ShowMinecraftPlayerBot")
         return embed
 
+    # このメソッドはEmbedと整合する本文テキストを生成する
+    # 呼び出し元: _compose_visuals
+    # 引数: state は状態コード、state_label は表示用名称、emoji は状態絵文字、players はプレイヤー名リスト、note は補足文
+    # 戻り値: 表示用テキスト
+    def _build_text_summary(
+        self,
+        state: str,
+        state_label: str,
+        emoji: str,
+        players: Iterable[str],
+        note: Optional[str],
+    ) -> str:
+        # 表示用テキストを行単位で構築する処理
+        player_list = list(players)
+        lines = [
+            f"{emoji} **サーバー状態**: `{state_label}` (`{state or '不明'}`)",
+            f"👥 **オンライン人数**: `{len(player_list)}` 人",
+        ]
+        if player_list:
+            lines.append("👤 **参加プレイヤー**: " + ", ".join(player_list))
+        else:
+            lines.append("👤 **参加プレイヤー**: なし")
+        if note:
+            lines.append(f"📝 **補足**: {note}")
+        return "\n".join(lines)
+
     # このメソッドは状態に応じた表示情報を返す
-    # 呼び出し元: _build_embed
+    # 呼び出し元: _compose_visuals
     # 引数: state はサーバー状態文字列
     # 戻り値: (表示名, 色, アイコン絵文字) のタプル
     def _resolve_state_appearance(self, state: str) -> Tuple[str, discord.Colour, str]:

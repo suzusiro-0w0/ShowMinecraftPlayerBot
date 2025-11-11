@@ -9,7 +9,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from mcrcon import MCRcon
 
@@ -72,6 +72,14 @@ class ServerController:
         self._restart_command = restart_command
         # コマンド実行のタイムアウト秒数を保持する変数
         self._command_timeout = command_timeout
+        # サーバー操作中であることを示す一時状態を保持する変数
+        self._transient_state: Optional[str] = None
+        # 一時状態終了後に到達してほしい最終状態を保持する変数
+        self._expected_state: Optional[str] = None
+        # 上記の状態を排他的に読み書きするためのロックを保持する変数
+        self._state_lock = asyncio.Lock()
+        # 直前に出力した接続失敗ログメッセージを保持する変数
+        self._last_connection_error_message: Optional[str] = None
 
     # このメソッドはRCONを利用して現在のサーバー状態を取得する
     # 呼び出し元: StatusUpdaterCogの定期処理、ServerCommandsCogの前提条件確認
@@ -79,17 +87,66 @@ class ServerController:
     # 戻り値: ServerStatus
     async def get_status(self) -> ServerStatus:
         # RCON接続およびレスポンス解析を行いサーバー状態を取得する処理
+        # 一時状態と期待状態を読み出す処理
+        transient_state, expected_state = await self._get_transient_state()
         try:
             response = await asyncio.to_thread(self._execute_rcon_list)
             players = self._parse_player_list(response)
-            state = "running" if players is not None else "unknown"
-            player_names = players if players is not None else []
-            message = "RCONから状態を取得しました" if players is not None else "RCON応答の解析に失敗しました"
-            return ServerStatus(state=state, players=player_names, message=message)
+            if players is not None:
+                actual_state = "running"
+                player_names = players
+                message = "RCONから状態を取得しました"
+            else:
+                actual_state = "unknown"
+                player_names = []
+                message = "RCON応答の解析に失敗しました"
+            # 接続失敗ログの重複出力状態をリセットする処理
+            self._reset_connection_failure_log()
+        except (ConnectionError, ConnectionRefusedError, OSError, TimeoutError) as exc:
+            # 接続できない場合はサーバー停止中とみなす処理
+            actual_state = "stopped"
+            player_names = []
+            message = f"RCON接続に失敗しました: {exc}"
+            # 同内容のログが連続しないよう制御する処理
+            self._log_connection_failure_once(message)
         except Exception as exc:  # pylint: disable=broad-except
-            # 例外発生時はunknown状態として扱う処理
+            # その他の例外は不明状態として扱う処理
             self._logger.error("サーバー状態取得に失敗しました", exc_info=exc)
-            return ServerStatus(state="unknown", players=[], message=str(exc))
+            actual_state = "unknown"
+            player_names = []
+            message = str(exc)
+            # 想定外エラー時も接続失敗ログ状態をリセットする処理
+            self._reset_connection_failure_log()
+        # 一時状態を評価して表示用の状態を決める処理
+        display_state = actual_state
+        if transient_state:
+            if expected_state and actual_state == expected_state:
+                await self._clear_transient_state()
+                display_state = actual_state
+            else:
+                display_state = transient_state
+        return ServerStatus(state=display_state, players=player_names, message=message)
+
+    # このメソッドは接続失敗メッセージを重複なくログに出力する
+    # 呼び出し元: get_status 内の接続失敗処理
+    # 引数: message は出力するメッセージ文字列
+    # 戻り値: なし
+    def _log_connection_failure_once(self, message: str) -> None:
+        # 直前と同一メッセージであれば新たに出力しない処理
+        if self._last_connection_error_message == message:
+            return
+        # ログへメッセージを出力する処理
+        self._logger.error(message)
+        # 直前メッセージとして記録する処理
+        self._last_connection_error_message = message
+
+    # このメソッドは接続失敗ログの重複管理をリセットする
+    # 呼び出し元: get_status 内の成功時および想定外エラー処理
+    # 引数: なし
+    # 戻り値: なし
+    def _reset_connection_failure_log(self) -> None:
+        # 直前メッセージの記録を破棄する処理
+        self._last_connection_error_message = None
 
     # このメソッドはサーバーを起動する
     # 呼び出し元: ServerCommandsCog.start_server コマンド
@@ -101,7 +158,15 @@ class ServerController:
             return ServerActionResult(success=False, message="起動コマンドが設定されていません")
         # 設定されたコマンドを絶対パスへ変換する処理
         resolved_command = self._resolve_start_command(self._start_command)
-        return await self._run_command(resolved_command, "サーバーを起動しました")
+        await self._set_transient_state("starting", "running")
+        try:
+            result = await self._run_command(resolved_command, "サーバーを起動しました")
+        except Exception:
+            await self._clear_transient_state()
+            raise
+        if not result.success:
+            await self._clear_transient_state()
+        return result
 
     # このメソッドはサーバーを停止する
     # 呼び出し元: ServerCommandsCog.stop_server コマンド
@@ -109,38 +174,79 @@ class ServerController:
     # 戻り値: ServerActionResult
     async def stop_server(self) -> ServerActionResult:
         # RCON経由でstopコマンドを送信する処理
+        await self._set_transient_state("stopping", "stopped")
         try:
-            response = await asyncio.to_thread(self._execute_rcon_command, "stop")
-        except Exception as exc:  # pylint: disable=broad-except
-            # RCON停止に失敗した場合のエラーログ出力処理
-            self._logger.error("RCON経由での停止に失敗しました", exc_info=exc)
-            return ServerActionResult(
-                success=False,
-                message="RCON経由での停止に失敗しました",
-                detail=str(exc),
-            )
-        # 成功時のレスポンスをまとめて返す処理
-        return ServerActionResult(
-            success=True,
-            message="RCON経由でサーバー停止を指示しました",
-            detail=response,
-        )
+            result = await self._stop_via_rcon()
+        except Exception:
+            await self._clear_transient_state()
+            raise
+        if not result.success:
+            await self._clear_transient_state()
+        return result
 
     # このメソッドはサーバーを再起動する
     # 呼び出し元: ServerCommandsCog.restart_server コマンド
     # 引数: なし
     # 戻り値: ServerActionResult
     async def restart_server(self) -> ServerActionResult:
-        if self._restart_command:
-            return await self._run_command(self._restart_command, "サーバーを再起動しました")
-        # 再起動コマンドが未設定の場合は停止と起動を順に呼び出す処理
-        stop_result = await self.stop_server()
-        if not stop_result.success:
-            return ServerActionResult(success=False, message="停止に失敗したため再起動できません", detail=stop_result.detail)
-        start_result = await self.start_server()
-        if not start_result.success:
-            return ServerActionResult(success=False, message="起動に失敗したため再起動できません", detail=start_result.detail)
-        return ServerActionResult(success=True, message="停止後に起動して再起動しました")
+        await self._set_transient_state("restarting", "running")
+        try:
+            if self._restart_command:
+                result = await self._run_command(self._restart_command, "サーバーを再起動しました")
+            else:
+                stop_result = await self._stop_via_rcon()
+                if not stop_result.success:
+                    await self._clear_transient_state()
+                    return ServerActionResult(
+                        success=False,
+                        message="停止に失敗したため再起動できません",
+                        detail=stop_result.detail,
+                    )
+                resolved_command = self._resolve_start_command(self._start_command) if self._start_command else ""
+                if not resolved_command:
+                    await self._clear_transient_state()
+                    return ServerActionResult(success=False, message="起動コマンドが未設定のため再起動できません")
+                start_result = await self._run_command(resolved_command, "サーバーを起動しました")
+                if not start_result.success:
+                    await self._clear_transient_state()
+                    return ServerActionResult(
+                        success=False,
+                        message="起動に失敗したため再起動できません",
+                        detail=start_result.detail,
+                    )
+                result = ServerActionResult(success=True, message="停止後に起動して再起動しました")
+        except Exception:
+            await self._clear_transient_state()
+            raise
+        if not result.success:
+            await self._clear_transient_state()
+        return result
+
+    # このメソッドは一時状態を設定する
+    # 呼び出し元: start_server, stop_server, restart_server
+    # 引数: state は表示用一時状態、expected は完了後に期待する本来の状態
+    # 戻り値: なし
+    async def _set_transient_state(self, state: str, expected: str) -> None:
+        async with self._state_lock:
+            self._transient_state = state
+            self._expected_state = expected
+
+    # このメソッドは一時状態を消去する
+    # 呼び出し元: get_status, 各操作メソッドの例外処理
+    # 引数: なし
+    # 戻り値: なし
+    async def _clear_transient_state(self) -> None:
+        async with self._state_lock:
+            self._transient_state = None
+            self._expected_state = None
+
+    # このメソッドは一時状態と期待状態を取得する
+    # 呼び出し元: get_status
+    # 引数: なし
+    # 戻り値: (一時状態, 期待状態) のタプル
+    async def _get_transient_state(self) -> Tuple[Optional[str], Optional[str]]:
+        async with self._state_lock:
+            return self._transient_state, self._expected_state
 
     # このメソッドはRCONを使ってlistコマンドを実行する
     # 呼び出し元: get_status 内の to_thread 処理
@@ -198,6 +304,26 @@ class ServerController:
         if process.returncode == 0:
             return ServerActionResult(success=True, message=success_message, detail=stdout.decode("utf-8", errors="ignore"))
         return ServerActionResult(success=False, message="コマンド実行に失敗しました", detail=stderr.decode("utf-8", errors="ignore"))
+
+    # このメソッドは停止コマンドの送信処理を共通化する
+    # 呼び出し元: stop_server, restart_server
+    # 引数: なし
+    # 戻り値: ServerActionResult
+    async def _stop_via_rcon(self) -> ServerActionResult:
+        try:
+            response = await asyncio.to_thread(self._execute_rcon_command, "stop")
+        except Exception as exc:  # pylint: disable=broad-except
+            self._logger.error("RCON経由での停止に失敗しました", exc_info=exc)
+            return ServerActionResult(
+                success=False,
+                message="RCON経由での停止に失敗しました",
+                detail=str(exc),
+            )
+        return ServerActionResult(
+            success=True,
+            message="RCON経由でサーバー停止を指示しました",
+            detail=response,
+        )
 
     # このメソッドは起動コマンド用のパスを絶対パスに整形する
     # 呼び出し元: start_server
