@@ -96,6 +96,8 @@ class StatusUpdaterCog(commands.Cog):
         # 初期化開始をログに出力する処理
         self._logger.info("状況メッセージの初期化を開始します")
         await self._manager.ensure_message()
+        # チャンネルに残っている旧コマンドメッセージを整理する処理
+        await self._manager.cleanup_command_messages()
         # 状況監視ループを開始する処理（asyncio.create_taskでイベントループ取得を抽象化）
         # 監視ループ開始をログに出力する処理
         self._logger.info("状態監視ループを開始します")
