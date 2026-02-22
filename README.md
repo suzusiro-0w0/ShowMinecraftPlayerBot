@@ -12,7 +12,8 @@
    - `MC_CONTROL_MODE=docker`
    - `MC_MODE=compose` または `container`
 3. Botコンテナに `docker.sock` をマウント。
-   - 例: `docker-compose.yml`（同梱サンプル）または `docker-compose.bot.yml` を利用
+   - 例: `docker-compose.yml`（同梱サンプル）を利用
+
 4. `MC_ALLOWED_USER_IDS` または `MC_ALLOWED_ROLE_IDS` を設定（実行権限）。
 5. Bot起動後、Discordで `/mc start` `/mc stop` `/mc status` を実行。
 
@@ -35,7 +36,7 @@
 - composeモードを使う場合、対象の compose プロジェクトパスを Botコンテナから参照できること。
 
 ### 2) Botコンテナ側のマウント設定
-`docker-compose.yml`（同梱）/`docker-compose.bot.yml` の例:
+`docker-compose.yml`（同梱）の例:
 - `/var/run/docker.sock:/var/run/docker.sock:rw`
 - `/opt/minecraft-stack:/opt/minecraft-stack:ro`（composeモードで必要な場合）
 
@@ -63,7 +64,8 @@
    - `MC_MODE=compose`
    - `MC_PROJECT_DIR`（Minecraft composeプロジェクトのディレクトリ）
    - `MC_COMPOSE_FILE`（Minecraft側のcompose yaml絶対パス）
-3. Bot用compose（例: `docker-compose.bot.yml`）で以下をマウントします。
+3. Bot用compose（例: `docker-compose.yml`）で以下をマウントします。
+   - `./config.ini:/app/config.ini:ro`
    - `/var/run/docker.sock:/var/run/docker.sock:rw`
    - `MC_PROJECT_DIR` と `MC_COMPOSE_FILE` を参照できる読み取り専用マウント
 4. Botコンテナ起動後、`/mc start` `/mc stop` `/mc status` がcomposeプロジェクトへ作用することを確認します。
@@ -171,4 +173,12 @@
 - [ ] `AUTO_STOP_ENABLED` 利用時に `AUTO_STOP_HOURS` が運用意図と一致している
 - [ ] `python -m compileall bot` が成功する
 - [ ] 起動前に `python - <<'PY' ...` の設定整合スクリプトで必須キー欠落がないことを確認する
+
+## 起動後のDiscord動作確認（/mc start・/mc stop）
+- [ ] Botがオンラインで、`/mc` グループがサーバーに表示される
+- [ ] 権限ユーザーで `/mc status` を実行し、応答が返る
+- [ ] 権限ユーザーで `/mc start` を実行し、成功または理由付き失敗が返る
+- [ ] 権限ユーザーで `/mc stop` を実行し、成功または理由付き失敗が返る
+- [ ] 非権限ユーザーで `/mc start` を実行し、権限エラーが返る
+- [ ] start/stopを同時に実行し、片方が「実行中のため再実行」メッセージになる
 
