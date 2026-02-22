@@ -1,19 +1,20 @@
-# Docker ComposeでBotを起動するためのサンプル定義
-# 目的: /mc コマンドの docker モード（compose/container）を利用可能にする
+# Docker ComposeでBotをビルド・起動するための定義
+# 目的: PortainerのGit Repository Stackと通常のdocker compose運用の両方で同じ定義を使えるようにする
 services:
   show-minecraft-player-bot:
-    # 利用するBotイメージ名を環境に合わせて変更する
-    image: your-registry/show-minecraft-player-bot:latest
+    # リポジトリ直下のDockerfileからイメージをビルドする
+    build: .
     # Botの作業ディレクトリを明示し、config.ini参照位置を固定する
     working_dir: /app
-    # Python Botを起動するコマンドを明示する
+    # Python Botをモジュール実行で起動する
     command: ["python", "-m", "bot.main"]
     volumes:
-      # Botが読み込む設定ファイル（.ini）を読み取り専用でマウントする
-      - ./config.ini:/app/config.ini:ro
+      # ホスト側で管理する設定ファイルを読み取り専用でマウントする（秘密情報はGit管理しない）
+      - /opt/showmc/config.ini:/app/config.ini:ro
 
       # Docker API利用のため docker.sock をマウントする
       - /var/run/docker.sock:/var/run/docker.sock:rw
       # composeモード利用時に参照するMinecraft側プロジェクトを読み取り専用でマウントする
       - /opt/minecraft-stack:/opt/minecraft-stack:ro
+    # 常時運用を想定して手動停止まで自動再起動する
     restart: unless-stopped
