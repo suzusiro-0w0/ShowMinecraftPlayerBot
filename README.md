@@ -55,6 +55,19 @@
 - `docker.sock` をマウントしたコンテナはホスト制御権限を持ちます。
 - Botイメージ更新権限・設定変更権限・Discord実行権限（許可ロール/ユーザー）を必ず分離してください。
 
+### 5) ComposeモードでこのPython Botを動かす手順
+1. ホスト側でBot用ディレクトリを用意し、`config.ini` を配置します。
+2. `config.ini` の `[minecraft_control]` を以下のように設定します。
+   - `MC_CONTROL_MODE=docker`
+   - `MC_MODE=compose`
+   - `MC_PROJECT_DIR`（Minecraft composeプロジェクトのディレクトリ）
+   - `MC_COMPOSE_FILE`（Minecraft側のcompose yaml絶対パス）
+3. Bot用compose（例: `docker-compose.bot.yml`）で以下をマウントします。
+   - `/var/run/docker.sock:/var/run/docker.sock:rw`
+   - `MC_PROJECT_DIR` と `MC_COMPOSE_FILE` を参照できる読み取り専用マウント
+4. Botコンテナ起動後、`/mc start` `/mc stop` `/mc status` がcomposeプロジェクトへ作用することを確認します。
+5. 初回確認は `docker compose logs -f <bot_service>` でエラー有無を確認してください。
+
 ---
 
 ## `/mc` 制御モード整理（DockerCompose / Windows / Linux 分離）
@@ -147,3 +160,14 @@
 - 状態監視ループで例外が連続した場合、エラー通知は5分クールダウンされるため通知スパムを抑制できます。
 - `AUTO_STOP_ENABLED` を使う場合、停止直前に再確認する仕様のため一時的な状態ブレでの誤停止を抑制できます。
 - Botコンテナは `restart: unless-stopped` などの再起動ポリシー設定を推奨します。
+
+
+## 厳重チェック（実行前/運用前）
+- [ ] `MC_CONTROL_MODE` と `MC_MODE` / `MC_LOCAL_PLATFORM` の組み合わせが正しい
+- [ ] Docker運用時に `docker.sock` がマウントされている
+- [ ] composeモード時に `MC_PROJECT_DIR` / `MC_COMPOSE_FILE` が実在し、Botコンテナから参照できる
+- [ ] `/mc` 実行権限（`MC_ALLOWED_USER_IDS` / `MC_ALLOWED_ROLE_IDS`）が設定されている
+- [ ] `AUTO_STOP_ENABLED` 利用時に `AUTO_STOP_HOURS` が運用意図と一致している
+- [ ] `python -m compileall bot` が成功する
+- [ ] 起動前に `python - <<'PY' ...` の設定整合スクリプトで必須キー欠落がないことを確認する
+
