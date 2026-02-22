@@ -1,0 +1,15 @@
+# Docker ComposeでBotを起動するためのサンプル定義
+# 目的: /mc コマンドの docker モード（compose/container）を利用可能にする
+services:
+  show-minecraft-player-bot:
+    # 利用するBotイメージ名を環境に合わせて変更する
+    image: your-registry/show-minecraft-player-bot:latest
+    # Botの設定値を外部ファイルから読み込む
+    env_file:
+      - ./.env
+    volumes:
+      # Docker API利用のため docker.sock をマウントする
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # composeモード利用時に参照するMinecraft側プロジェクトを読み取り専用でマウントする
+      - /opt/minecraft-stack:/opt/minecraft-stack:ro
+    restart: unless-stopped

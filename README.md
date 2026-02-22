@@ -12,7 +12,7 @@
    - `MC_CONTROL_MODE=docker`
    - `MC_MODE=compose` または `container`
 3. Botコンテナに `docker.sock` をマウント。
-   - 例: `docker-compose.bot.yml` を利用
+   - 例: `docker-compose.yml`（同梱サンプル）または `docker-compose.bot.yml` を利用
 4. `MC_ALLOWED_USER_IDS` または `MC_ALLOWED_ROLE_IDS` を設定（実行権限）。
 5. Bot起動後、Discordで `/mc start` `/mc stop` `/mc status` を実行。
 
@@ -35,7 +35,7 @@
 - composeモードを使う場合、対象の compose プロジェクトパスを Botコンテナから参照できること。
 
 ### 2) Botコンテナ側のマウント設定
-`docker-compose.bot.yml` の例:
+`docker-compose.yml`（同梱）/`docker-compose.bot.yml` の例:
 - `/var/run/docker.sock:/var/run/docker.sock:rw`
 - `/opt/minecraft-stack:/opt/minecraft-stack:ro`（composeモードで必要な場合）
 
@@ -56,6 +56,7 @@
 - Botイメージ更新権限・設定変更権限・Discord実行権限（許可ロール/ユーザー）を必ず分離してください。
 
 ### 5) ComposeモードでこのPython Botを動かす手順
+- 同梱の `docker-compose.yml` はそのまま雛形として利用可能です。
 1. ホスト側でBot用ディレクトリを用意し、`config.ini` を配置します。
 2. `config.ini` の `[minecraft_control]` を以下のように設定します。
    - `MC_CONTROL_MODE=docker`
