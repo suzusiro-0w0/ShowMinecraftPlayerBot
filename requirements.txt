@@ -4,3 +4,5 @@ discord.py
 mcstatus
 # RCONクライアントライブラリ
 mcrcon
+# Docker Engine APIクライアントライブラリ
+docker

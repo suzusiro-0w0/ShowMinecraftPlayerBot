@@ -34,3 +34,13 @@
 - `StatusMessageStorage` が `data/status_message.json` を読み書きし、状況メッセージIDと直近状態を永続化します。
 
 以上の機能により、Discord上からMinecraftサーバーの運用状況を確認しつつ、必要な操作を安全に実行できます。
+
+
+## Docker経由のMinecraft制御コマンド
+- `bot/cogs/minecraft_commands.py` が `/mc start`・`/mc stop`・`/mc status` のスラッシュコマンドを提供します（docker/localの2モード対応）。
+- 実行権限は `minecraft_control` セクションの許可ユーザーID／許可ロールIDで制御します。
+- `start` と `stop` は排他ロックで同時実行を防止し、競合時はDiscordへエラーを返します。
+- 実行処理は `bot/minecraft_control.py` の固定動作のみで、任意コマンド実行は行いません。dockerモードはcompose/container、localモードはMC_LOCAL_PLATFORMでwindows/linuxを分離し、それぞれ専用の固定start/stop/statusコマンドを使用します。
+- 失敗時は理由付きエラーを返し、`ErrorReporter` 経由で管理チャンネルへも通知します。
+
+- `StatusUpdaterCog` はオプションで無人自動停止を行い、プレイヤー不在が設定時間（既定48時間）続いた際に停止前再確認を行ったうえで停止処理を実行します。

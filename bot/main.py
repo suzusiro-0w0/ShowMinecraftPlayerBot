@@ -17,8 +17,10 @@ import discord
 from discord.ext import commands
 
 from .config import ConfigLoader, StatusMessageStorage
+from .cogs.minecraft_commands import MinecraftCommandsCog
 from .cogs.server_commands import ServerCommandsCog
 from .cogs.status_updater import StatusUpdaterCog
+from .minecraft_control import MinecraftControlConfig, MinecraftController
 from .server_control import ServerController
 from .status_message import StatusMessageManager
 from .utils.error_reporter import ErrorReporter
@@ -76,6 +78,19 @@ async def main() -> None:
     intents.message_content = True
     # Botインスタンスを生成する処理（!プレフィックスのテキストコマンドを利用）
     bot = commands.Bot(command_prefix="!", intents=intents)
+
+    # このローカル関数はID一覧設定文字列を整数リストへ変換する
+    # 呼び出し元: main 関数内の /mc コマンド設定読み込み処理
+    # 引数: raw_value はカンマ区切りのID文字列
+    # 戻り値: intのリスト
+    def parse_id_list(raw_value: str) -> list[int]:
+        # 結果格納用の配列を初期化する処理
+        values: list[int] = []
+        # カンマ区切りの要素を順に検証して整数化する処理
+        for token in [item.strip() for item in raw_value.split(",") if item.strip()]:
+            if token.isdigit():
+                values.append(int(token))
+        return values
     # 永続化ファイルのストレージを用意する処理
     storage = StatusMessageStorage(Path("data/status_message.json"))
     # 状況メッセージ管理クラスを初期化する処理
@@ -93,9 +108,50 @@ async def main() -> None:
     )
     # エラーレポーターを初期化する処理
     reporter = ErrorReporter(bot, config.discord.error_channel_id)
+    # Docker経由のMinecraft制御器を設定から初期化する処理
+    mc_controller = MinecraftController(
+        MinecraftControlConfig(
+            control_mode=config.minecraft_control.mc_control_mode,
+            docker_mode=config.minecraft_control.mc_mode,
+            project_dir=config.minecraft_control.mc_project_dir,
+            compose_file=config.minecraft_control.mc_compose_file,
+            env_file=config.minecraft_control.mc_env_file,
+            container_name=config.minecraft_control.mc_container_name,
+            compose_project=config.minecraft_control.mc_compose_project,
+            local_platform=config.minecraft_control.mc_local_platform,
+            windows_start_command=config.minecraft_control.mc_windows_start_command,
+            windows_stop_command=config.minecraft_control.mc_windows_stop_command,
+            windows_status_command=config.minecraft_control.mc_windows_status_command,
+            linux_start_command=config.minecraft_control.mc_linux_start_command,
+            linux_stop_command=config.minecraft_control.mc_linux_stop_command,
+            linux_status_command=config.minecraft_control.mc_linux_status_command,
+            timeout_seconds=max(1, config.minecraft_control.mc_timeout_seconds),
+        )
+    )
     # Cogを登録する処理
-    await bot.add_cog(StatusUpdaterCog(bot, controller, manager, config.server.status_interval, reporter))
+    await bot.add_cog(
+        StatusUpdaterCog(
+            bot,
+            controller,
+            manager,
+            config.server.status_interval,
+            reporter,
+            config.server.auto_stop_enabled,
+            config.server.auto_stop_hours,
+        )
+    )
     await bot.add_cog(ServerCommandsCog(bot, controller, manager, reporter, config.discord.admin_role_id))
+    await bot.add_cog(
+        MinecraftCommandsCog(
+            bot,
+            mc_controller,
+            reporter,
+            parse_id_list(config.minecraft_control.mc_allowed_user_ids),
+            parse_id_list(config.minecraft_control.mc_allowed_role_ids),
+        )
+    )
+    # スラッシュコマンド定義をDiscordへ同期する処理
+    await bot.tree.sync()
     # Botを起動する処理
     await bot.start(config.discord.token)
 

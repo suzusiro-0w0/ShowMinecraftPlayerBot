@@ -124,3 +124,30 @@
 2. 設定ファイルを拡張し、既存ユーザーが移行できるようREADMEへ追記。
 3. 実装後に統合テストを実施し、Discord上の動作を確認。
 
+
+
+## Docker制御拡張（/mcコマンド）
+- `bot/minecraft_control.py` に `MinecraftController` を追加し、`MC_CONTROL_MODE=docker|local` で制御方式を切り替える。
+- `MC_MODE=compose|container` を切り替え、以下を実装する。
+  - compose:
+    - start: `docker compose --project-directory ... -f ... up -d`
+    - stop: `docker compose --project-directory ... -f ... stop`
+    - status: `docker compose ... ps --format json` を解析
+  - container:
+    - `MC_CONTAINER_NAME` 指定時は単一コンテナを操作
+    - `MC_COMPOSE_PROJECT` 指定時は `com.docker.compose.project=<project>` ラベルで対象を列挙し一括操作
+- local:
+    - `MC_LOCAL_PLATFORM=windows|linux` を指定
+    - windows: `MC_WINDOWS_START_COMMAND` / `MC_WINDOWS_STOP_COMMAND` / `MC_WINDOWS_STATUS_COMMAND` を固定実行
+    - linux: `MC_LINUX_START_COMMAND` / `MC_LINUX_STOP_COMMAND` / `MC_LINUX_STATUS_COMMAND` を固定実行
+    - status: 各OSのSTATUS_COMMANDの終了コードで running/stopped を判定
+- start/stopは `asyncio.Lock` で排他制御し、同時実行を禁止する。
+- 任意コマンド実行を避けるため、実行する操作は固定化したAPI呼び出し／固定引数のみとする。
+- 設定不備・対象不在・タイムアウト・Docker失敗は理由付きで例外化し、Discordへエラー応答する。
+- タイムアウトは設定値（既定60秒）で中断する。
+
+
+## 無人自動停止（オプション）
+- `AUTO_STOP_ENABLED=True` の場合、`StatusUpdaterCog` が無人継続時間を監視する。
+- 無人時間が `AUTO_STOP_HOURS`（既定48時間）を超えたら停止直前に再度 `get_status()` を実行し、無人継続が確認できた場合のみ `stop_server()` を実行する。
+- 再確認時にプレイヤー復帰または稼働状態以外であれば停止を中止する。
