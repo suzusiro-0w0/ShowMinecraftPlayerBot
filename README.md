@@ -132,3 +132,12 @@
 - RCON利用機能を使う場合はMinecraftサーバーでRCONを有効化してください。
 - Discord上でコマンドを実行するユーザーには適切なロール/ID制限を設定してください。
 - エラーチャンネル権限が不足している場合はログに警告を残し、Discord送信はスキップされます。
+
+
+## 整合性チェック（今回実施した確認項目）
+- [x] `MC_CONTROL_MODE=docker` のとき `MC_MODE=compose|container` で分岐すること
+- [x] `MC_CONTROL_MODE=local` のとき `MC_LOCAL_PLATFORM=windows|linux` で分岐すること
+- [x] Windows設定が `MC_WINDOWS_*`、Linux設定が `MC_LINUX_*` に分離されていること
+- [x] `example_config.ini` / `bot/config.py` / `bot/main.py` / `bot/minecraft_control.py` で同一設定名が利用されること
+- [x] `AUTO_STOP_ENABLED` / `AUTO_STOP_HOURS` が設定と実装で一致していること
+- [x] `python -m compileall bot` が成功すること
