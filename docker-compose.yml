@@ -1,20 +1,18 @@
-# Docker ComposeでBotをビルド・起動するための定義
-# 目的: PortainerのGit Repository Stackと通常のdocker compose運用の両方で同じ定義を使えるようにする
+# ローカル環境でShowMinecraftPlayerBotを運用するためのCompose定義
 services:
   show-minecraft-player-bot:
-    # リポジトリ直下のDockerfileからイメージをビルドする
+    # ローカルのDockerfileを使って毎回確実にビルドする
     build: .
-    # Botの作業ディレクトリを明示し、config.ini参照位置を固定する
+    # コンテナ識別を容易にするため固定名を付与する
+    container_name: show-minecraft-player-bot
+    # Bot実行時の作業ディレクトリを固定する
     working_dir: /app
-    # Python Botをモジュール実行で起動する
+    # エントリポイントはPythonモジュール実行に固定する
     command: ["python", "-m", "bot.main"]
     volumes:
-      # ホスト側で管理する設定ファイルを読み取り専用でマウントする（秘密情報はGit管理しない）
+      # 機密情報を含む本番設定はホスト側config.iniを読み取り専用でマウントする
       - /opt/showmc/config.ini:/app/config.ini:ro
-
-      # Docker API利用のため docker.sock をマウントする
+      # /mc のdocker制御に必須となるDockerソケットをマウントする
       - /var/run/docker.sock:/var/run/docker.sock:rw
-      # composeモード利用時に参照するMinecraft側プロジェクトを読み取り専用でマウントする
-      - /opt/minecraft-stack:/opt/minecraft-stack:ro
-    # 常時運用を想定して手動停止まで自動再起動する
+    # 手動停止まで自動再起動する
     restart: unless-stopped
