@@ -1,14 +1,19 @@
-# Discord BotコンテナをDockerソケット経由でMinecraft制御できるようにする構成例
+# Discord BotコンテナをDockerソケット経由でMinecraft制御できるようにする補助構成例
+# 目的: 既存の docker-compose.yml に近い構成を別名でも利用できるようにする
 services:
   show-minecraft-player-bot:
-    # 既存のBotイメージ名に置き換えて使用する
-    image: your-registry/show-minecraft-player-bot:latest
-    # Botの設定ファイルを読み込ませる
-    env_file:
-      - ./.env
+    # リポジトリ直下のDockerfileからイメージをビルドする
+    build: .
+    # Botの作業ディレクトリを /app に固定する
+    working_dir: /app
+    # Python Botをモジュール実行で起動する
+    command: ["python", "-m", "bot.main"]
     volumes:
+      # ホスト側で管理する設定ファイルを読み取り専用でマウントする
+      - /opt/showmc/config.ini:/app/config.ini:ro
       # Docker APIを利用するためにdocker.sockをrwでマウントする
       - /var/run/docker.sock:/var/run/docker.sock:rw
       # composeモード利用時に必要なプロジェクトディレクトリを読み取り専用でマウントする
       - /opt/minecraft-stack:/opt/minecraft-stack:ro
+    # 常時運用を想定して手動停止まで自動再起動する
     restart: unless-stopped

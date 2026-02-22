@@ -64,12 +64,42 @@
    - `MC_MODE=compose`
    - `MC_PROJECT_DIR`（Minecraft composeプロジェクトのディレクトリ）
    - `MC_COMPOSE_FILE`（Minecraft側のcompose yaml絶対パス）
-3. Bot用compose（例: `docker-compose.yml`）で以下をマウントします。
+3. Bot用compose（`docker-compose.yml`）で以下をマウントします。
    - `./config.ini:/app/config.ini:ro`
    - `/var/run/docker.sock:/var/run/docker.sock:rw`
    - `MC_PROJECT_DIR` と `MC_COMPOSE_FILE` を参照できる読み取り専用マウント
 4. Botコンテナ起動後、`/mc start` `/mc stop` `/mc status` がcomposeプロジェクトへ作用することを確認します。
 5. 初回確認は `docker compose logs -f <bot_service>` でエラー有無を確認してください。
+
+---
+
+## Portainer（Git Repository Stack）でのデプロイ手順
+
+### 1) Stack作成時にGitリポジトリとComposeパスを指定
+1. Portainerで **Stacks** → **Add stack** を開きます。
+2. **Build method** で **Git Repository** を選択します。
+3. **Repository URL** に本リポジトリURLを設定します。
+4. **Compose path** に `docker-compose.yml` を指定します。
+5. 必要に応じてブランチを選択し、デプロイを実行します。
+
+### 2) ホスト側に `config.ini` を作成（Gitに秘密情報を置かない）
+1. ホスト上で設定ディレクトリを作成します。
+   - 例: `sudo mkdir -p /opt/showmc`
+2. `example_config.ini` を元に `config.ini` を作成します。
+   - 例: `sudo cp /path/to/ShowMinecraftPlayerBot/example_config.ini /opt/showmc/config.ini`
+3. `/opt/showmc/config.ini` を編集し、`DISCORD_TOKEN` や各種ID・運用値を設定します。
+
+> **重要:** `config.ini` にはDiscordトークン等の秘密情報が入るため、Gitへコミットせずホスト側で管理してください。
+
+### 3) `/mc` 制御の推奨設定
+- 初期運用は `container` モードを推奨します。
+  - `MC_CONTROL_MODE=docker`
+  - `MC_MODE=container`
+  - `MC_CONTAINER_NAME` にPortainer上で確認できるMinecraftコンテナ名を設定
+- セキュリティ上、`MC_ALLOWED_USER_IDS` または `MC_ALLOWED_ROLE_IDS` は**必ず設定**してください。
+
+### 4) 障害時の確認
+- Botの例外と失敗理由はログへ出力されるため、Portainerのコンテナログ（または `docker logs`）を確認してください。
 
 ---
 
@@ -181,4 +211,3 @@
 - [ ] 権限ユーザーで `/mc stop` を実行し、成功または理由付き失敗が返る
 - [ ] 非権限ユーザーで `/mc start` を実行し、権限エラーが返る
 - [ ] start/stopを同時に実行し、片方が「実行中のため再実行」メッセージになる
-
