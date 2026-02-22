@@ -31,6 +31,33 @@ from .utils.console_status import console_status_display
 _LOGGING_LISTENER: Optional[QueueListener] = None
 
 
+class ShowMinecraftPlayerBot(commands.Bot):
+    """アプリケーションコマンド同期タイミングを制御するBot実装"""
+
+    # このコンストラクタはBot生成時に同期方針フラグを初期化する
+    # 呼び出し元: main 関数のBot初期化処理
+    # 引数: args/kwargs は commands.Bot の初期化引数
+    # 戻り値: なし
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        # 親クラスの初期化処理を実行してdiscord.pyの内部状態を構築する処理
+        super().__init__(*args, **kwargs)
+        # スラッシュコマンド同期を1回だけ実行するためのフラグを保持する変数
+        self._is_tree_synced = False
+
+    # このメソッドはログイン後に呼ばれ、アプリケーションID確定後にコマンド同期を行う
+    # 呼び出し元: discord.py の setup_hook ライフサイクル
+    # 引数: なし
+    # 戻り値: なし
+    async def setup_hook(self) -> None:
+        # 既に同期済みなら重複実行を避ける処理
+        if self._is_tree_synced:
+            return
+        # Discordへアプリケーションコマンドを同期する処理
+        await self.tree.sync()
+        # 同期完了フラグを更新する処理
+        self._is_tree_synced = True
+
+
 # この関数はイベントループをブロックしないログ設定を適用する
 # 呼び出し元: main 関数の設定読み込み後
 # 引数: level_name は設定ファイルで指定されたログレベル名
@@ -77,7 +104,7 @@ async def main() -> None:
     intents = discord.Intents.default()
     intents.message_content = True
     # Botインスタンスを生成する処理（!プレフィックスのテキストコマンドを利用）
-    bot = commands.Bot(command_prefix="!", intents=intents)
+    bot = ShowMinecraftPlayerBot(command_prefix="!", intents=intents)
 
     # このローカル関数はID一覧設定文字列を整数リストへ変換する
     # 呼び出し元: main 関数内の /mc コマンド設定読み込み処理
@@ -150,8 +177,6 @@ async def main() -> None:
             parse_id_list(config.minecraft_control.mc_allowed_role_ids),
         )
     )
-    # スラッシュコマンド定義をDiscordへ同期する処理
-    await bot.tree.sync()
     # Botを起動する処理
     await bot.start(config.discord.token)
 
