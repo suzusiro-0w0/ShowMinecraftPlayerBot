@@ -42,6 +42,10 @@ class ServerSection:
     rcon_password: str
     # サーバー状態をポーリングする間隔（秒）を保持する変数
     status_interval: int
+    # 無人時の自動停止を有効化するかどうかを保持する変数
+    auto_stop_enabled: bool
+    # 無人になってから自動停止までの待機時間（時間）を保持する変数
+    auto_stop_hours: int
 
 
 @dataclass
@@ -69,6 +73,46 @@ class LoggingSection:
 
 
 @dataclass
+class MinecraftControlSection:
+    """Minecraft制御設定（docker/local）を保持するデータクラス"""
+
+    # 上位制御モード（docker または local）を保持する変数
+    mc_control_mode: str
+    # dockerモード時の制御モード（compose または container）を保持する変数
+    mc_mode: str
+    # composeモード時のプロジェクトディレクトリを保持する変数
+    mc_project_dir: str
+    # composeモード時のcomposeファイル絶対パスを保持する変数
+    mc_compose_file: str
+    # composeモード時に任意指定するenvファイルパスを保持する変数
+    mc_env_file: str
+    # containerモード時の単体対象コンテナ名を保持する変数
+    mc_container_name: str
+    # containerモード時のcompose project名を保持する変数
+    mc_compose_project: str
+    # localモードのOS種別（windows または linux）を保持する変数
+    mc_local_platform: str
+    # localモード（Windows）時の起動コマンドを保持する変数
+    mc_windows_start_command: str
+    # localモード（Windows）時の停止コマンドを保持する変数
+    mc_windows_stop_command: str
+    # localモード（Windows）時の状態確認コマンドを保持する変数
+    mc_windows_status_command: str
+    # localモード（Linux）時の起動コマンドを保持する変数
+    mc_linux_start_command: str
+    # localモード（Linux）時の停止コマンドを保持する変数
+    mc_linux_stop_command: str
+    # localモード（Linux）時の状態確認コマンドを保持する変数
+    mc_linux_status_command: str
+    # start/stop/status実行時のタイムアウト秒数を保持する変数
+    mc_timeout_seconds: int
+    # /mcコマンド実行を許可するユーザーID一覧（カンマ区切り）を保持する変数
+    mc_allowed_user_ids: str
+    # /mcコマンド実行を許可するロールID一覧（カンマ区切り）を保持する変数
+    mc_allowed_role_ids: str
+
+
+@dataclass
 class ConfigData:
     """設定ファイル全体のデータをひとまとめにするデータクラス"""
 
@@ -80,6 +124,8 @@ class ConfigData:
     commands: CommandSection
     # ログ関連の設定値を保持する変数
     logging: LoggingSection
+    # Docker経由のMinecraft制御設定を保持する変数
+    minecraft_control: MinecraftControlSection
 
 
 class ConfigLoader:
@@ -115,6 +161,7 @@ class ConfigLoader:
             server=self._load_server_section(),
             commands=self._load_command_section(),
             logging=self._load_logging_section(),
+            minecraft_control=self._load_minecraft_control_section(),
         )
 
     # このメソッドは設定値を辞書形式に変換して返す
@@ -129,6 +176,7 @@ class ConfigLoader:
             "server": config_data.server.__dict__,
             "commands": config_data.commands.__dict__,
             "logging": config_data.logging.__dict__,
+            "minecraft_control": config_data.minecraft_control.__dict__,
         }
 
     # このメソッドは設定ファイルへ現在値を書き戻す
@@ -141,6 +189,7 @@ class ConfigLoader:
         self._parser["server"] = {k: str(v) for k, v in config_data.server.__dict__.items()}
         self._parser["commands"] = {k: str(v) for k, v in config_data.commands.__dict__.items()}
         self._parser["logging"] = {k: str(v) for k, v in config_data.logging.__dict__.items()}
+        self._parser["minecraft_control"] = {k: str(v) for k, v in config_data.minecraft_control.__dict__.items()}
         # ファイルへ書き出す処理
         with self._config_path.open("w", encoding="utf-8") as file:
             self._parser.write(file)
@@ -175,6 +224,8 @@ class ConfigLoader:
             rcon_port=section.getint("rcon_port", 25575),
             rcon_password=section.get("rcon_password", ""),
             status_interval=section.getint("status_interval", 30),
+            auto_stop_enabled=section.getboolean("auto_stop_enabled", False),
+            auto_stop_hours=max(1, section.getint("auto_stop_hours", 48)),
         )
 
     # このメソッドはcommandsセクションの値を読み込む
@@ -203,6 +254,34 @@ class ConfigLoader:
         section = self._parser["logging"]
         return LoggingSection(level=section.get("level", "INFO"))
 
+    # このメソッドはminecraft_controlセクションの値を読み込む
+    # 呼び出し元: loadメソッド
+    # 引数: なし
+    # 戻り値: MinecraftControlSection
+    def _load_minecraft_control_section(self) -> MinecraftControlSection:
+        if "minecraft_control" not in self._parser:
+            self._parser["minecraft_control"] = {}
+        section = self._parser["minecraft_control"]
+        return MinecraftControlSection(
+            mc_control_mode=section.get("mc_control_mode", "docker"),
+            mc_mode=section.get("mc_mode", "container"),
+            mc_project_dir=section.get("mc_project_dir", ""),
+            mc_compose_file=section.get("mc_compose_file", ""),
+            mc_env_file=section.get("mc_env_file", ""),
+            mc_container_name=section.get("mc_container_name", ""),
+            mc_compose_project=section.get("mc_compose_project", ""),
+            mc_local_platform=section.get("mc_local_platform", "linux"),
+            mc_windows_start_command=section.get("mc_windows_start_command", ""),
+            mc_windows_stop_command=section.get("mc_windows_stop_command", ""),
+            mc_windows_status_command=section.get("mc_windows_status_command", ""),
+            mc_linux_start_command=section.get("mc_linux_start_command", ""),
+            mc_linux_stop_command=section.get("mc_linux_stop_command", ""),
+            mc_linux_status_command=section.get("mc_linux_status_command", ""),
+            mc_timeout_seconds=section.getint("mc_timeout_seconds", 60),
+            mc_allowed_user_ids=section.get("mc_allowed_user_ids", ""),
+            mc_allowed_role_ids=section.get("mc_allowed_role_ids", ""),
+        )
+
     # このメソッドはConfigParserへデフォルト値を書き込む
     # 呼び出し元: loadメソッド内の存在チェック分岐
     # 引数: なし
@@ -221,6 +300,8 @@ class ConfigLoader:
                     "rcon_port": "25575",
                     "rcon_password": "",
                     "status_interval": "30",
+                    "auto_stop_enabled": "False",
+                    "auto_stop_hours": "48",
                 },
                 "commands": {
                     "start_command": "",
@@ -230,6 +311,25 @@ class ConfigLoader:
                     "operation_retry_interval": "10",
                 },
                 "logging": {"level": "INFO"},
+                "minecraft_control": {
+                    "mc_control_mode": "docker",
+                    "mc_mode": "container",
+                    "mc_project_dir": "",
+                    "mc_compose_file": "",
+                    "mc_env_file": "",
+                    "mc_container_name": "",
+                    "mc_compose_project": "",
+                    "mc_local_platform": "linux",
+                    "mc_windows_start_command": "",
+                    "mc_windows_stop_command": "",
+                    "mc_windows_status_command": "",
+                    "mc_linux_start_command": "",
+                    "mc_linux_stop_command": "",
+                    "mc_linux_status_command": "",
+                    "mc_timeout_seconds": "60",
+                    "mc_allowed_user_ids": "",
+                    "mc_allowed_role_ids": "",
+                },
             }
         )
 
