@@ -141,3 +141,9 @@
 - [x] `example_config.ini` / `bot/config.py` / `bot/main.py` / `bot/minecraft_control.py` で同一設定名が利用されること
 - [x] `AUTO_STOP_ENABLED` / `AUTO_STOP_HOURS` が設定と実装で一致していること
 - [x] `python -m compileall bot` が成功すること
+
+## 長期運用（24/7）向けの確認ポイント
+- `STATUS_INTERVAL` は `1` 以上で運用してください（内部でも最小1秒に補正）。
+- 状態監視ループで例外が連続した場合、エラー通知は5分クールダウンされるため通知スパムを抑制できます。
+- `AUTO_STOP_ENABLED` を使う場合、停止直前に再確認する仕様のため一時的な状態ブレでの誤停止を抑制できます。
+- Botコンテナは `restart: unless-stopped` などの再起動ポリシー設定を推奨します。

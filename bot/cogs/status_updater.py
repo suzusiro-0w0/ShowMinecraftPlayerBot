@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+import time
 from typing import Optional
 
 from discord.ext import commands
@@ -42,7 +43,7 @@ class StatusUpdaterCog(commands.Cog):
         # 状況メッセージ管理クラスを保持する変数
         self._manager = manager
         # 状態更新間隔を保持する変数
-        self._interval = interval
+        self._interval = max(1, interval)
         # エラーレポーターを保持する変数
         self._reporter = reporter
         # 無人自動停止機能のON/OFFを保持する変数
@@ -57,6 +58,10 @@ class StatusUpdaterCog(commands.Cog):
         self._startup_task: Optional[asyncio.Task] = None
         # ログ出力用ロガーを保持する変数
         self._logger = logging.getLogger(__name__)
+        # 例外通知の最終送信時刻（monotonic秒）を保持する変数
+        self._last_error_reported_at: float = 0.0
+        # 例外通知の最小送信間隔（秒）を保持する変数
+        self._error_report_cooldown_seconds: float = 300.0
 
     # このメソッドはCogがロードされた際に呼び出され、監視タスクを開始する
     # 呼び出し元: discord.pyのCogライフサイクル
@@ -129,7 +134,11 @@ class StatusUpdaterCog(commands.Cog):
             except Exception as exc:  # pylint: disable=broad-except
                 # 例外が発生した場合は管理者へ通知する処理
                 self._logger.exception("状態監視ループで例外が発生しました")
-                await self._reporter.notify_error("状態更新タスクでエラーが発生", exc)
+                # 連続障害時の通知スパムを防ぐため、一定間隔でのみDiscord通知する処理
+                now_monotonic = time.monotonic()
+                if now_monotonic - self._last_error_reported_at >= self._error_report_cooldown_seconds:
+                    await self._reporter.notify_error("状態更新タスクでエラーが発生", exc)
+                    self._last_error_reported_at = now_monotonic
             # 次回まで待機する処理
             self._logger.debug("次回の状態取得まで待機します: interval=%s", self._interval)
             await asyncio.sleep(self._interval)
