@@ -11,6 +11,7 @@ services:
     volumes:
       # Botが読み込む設定ファイル（.ini）を読み取り専用でマウントする
       - ./config.ini:/app/config.ini:ro
+
       # Docker API利用のため docker.sock をマウントする
       - /var/run/docker.sock:/var/run/docker.sock:rw
       # composeモード利用時に参照するMinecraft側プロジェクトを読み取り専用でマウントする

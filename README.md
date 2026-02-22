@@ -13,6 +13,7 @@
    - `MC_MODE=compose` または `container`
 3. Botコンテナに `docker.sock` をマウント。
    - 例: `docker-compose.yml`（同梱サンプル）を利用
+
 4. `MC_ALLOWED_USER_IDS` または `MC_ALLOWED_ROLE_IDS` を設定（実行権限）。
 5. Bot起動後、Discordで `/mc start` `/mc stop` `/mc status` を実行。
 
