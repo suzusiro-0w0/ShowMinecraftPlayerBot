@@ -100,7 +100,14 @@ class StatusUpdaterCog(commands.Cog):
     async def _initialize_after_ready(self) -> None:
         # Botのログイン完了を待機する処理
         self._logger.info("Botの準備完了を待機しています")
-        await self._bot.wait_until_ready()
+        # login前にwait_until_readyを呼ぶと例外化するため、初期化完了までリトライ待機する処理
+        while True:
+            try:
+                await self._bot.wait_until_ready()
+                break
+            except RuntimeError:
+                # discord.pyの内部初期化が終わるまで短時間待機して再試行する処理
+                await asyncio.sleep(1)
         # 状況メッセージの存在を確保する処理
         self._logger.info("状況メッセージの初期化を開始します")
         await self._manager.ensure_message()
