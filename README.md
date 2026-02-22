@@ -75,12 +75,18 @@
 
 ## Portainer（Git Repository Stack）でのデプロイ手順
 
+### 0) このリポジトリURLをPortainerに渡して「そのまま」実行できるか
+- **結論:** ほぼそのまま実行できます。
+- ただし、秘密情報を含む `config.ini` はGit管理しないため、**ホスト側で `/opt/showmc/config.ini` を事前作成**する必要があります。
+- パスを変えたい場合は、Portainerの環境変数で `SHOWMC_CONFIG_PATH` を指定してください。
+
 ### 1) Stack作成時にGitリポジトリとComposeパスを指定
-1. Portainerで **Stacks** → **Add stack** を開きます。
-2. **Build method** で **Git Repository** を選択します。
-3. **Repository URL** に本リポジトリURLを設定します。
-4. **Compose path** に `docker-compose.yml` を指定します。
-5. 必要に応じてブランチを選択し、デプロイを実行します。
+- [ ] Portainerで **Stacks** → **Add stack** を開く
+- [ ] **Build method** で **Git Repository** を選択する
+- [ ] **Repository URL** に本リポジトリURLを設定する
+- [ ] **Compose path** に `docker-compose.portainer.yml` を指定する
+- [ ] （任意）`SHOWMC_CONFIG_PATH` を設定する（未指定時は `/opt/showmc/config.ini`）
+- [ ] 必要に応じてブランチを選択してデプロイする
 
 ### 2) ホスト側に `config.ini` を作成（Gitに秘密情報を置かない）
 1. ホスト上で設定ディレクトリを作成します。
@@ -91,15 +97,26 @@
 
 > **重要:** `config.ini` にはDiscordトークン等の秘密情報が入るため、Gitへコミットせずホスト側で管理してください。
 
-### 3) `/mc` 制御の推奨設定
+### 3) `/mc` 制御の必須・推奨設定
+- `/mc` のdocker制御を使うため、`/var/run/docker.sock` のマウントは**必須**です。
 - 初期運用は `container` モードを推奨します。
   - `MC_CONTROL_MODE=docker`
   - `MC_MODE=container`
-  - `MC_CONTAINER_NAME` にPortainer上で確認できるMinecraftコンテナ名を設定
+  - `MC_CONTAINER_NAME` に既存Minecraftコンテナ名を設定
 - セキュリティ上、`MC_ALLOWED_USER_IDS` または `MC_ALLOWED_ROLE_IDS` は**必ず設定**してください。
 
-### 4) 障害時の確認
-- Botの例外と失敗理由はログへ出力されるため、Portainerのコンテナログ（または `docker logs`）を確認してください。
+### 4) composeモードを使う場合の追加設定
+- `MC_MODE=compose` を使う場合は、`docker-compose.portainer.yml` の次行コメントを外してマウントを有効化してください。
+  - `- ${MC_STACK_PATH:-/opt/minecraft-stack}:/opt/minecraft-stack:ro`
+- あわせて `config.ini` 側の `MC_PROJECT_DIR` / `MC_COMPOSE_FILE` が、そのマウント内のパスと一致することを確認してください。
+
+### 5) 障害時の確認
+- 失敗時はDiscordのエラーチャンネルへ理由を通知し、標準エラー出力の要点もログに残します。
+- Portainerのコンテナログ（または `docker logs`）で、直近の例外とstderr要点を確認してください。
+
+### 6) 既存Composeファイルの扱い
+- `docker-compose.yml` と `docker-compose.bot.yml` は改行入りの有効なYAMLです。
+- PortainerでGit Repository Stackとして使う場合は、`docker-compose.portainer.yml` の利用を推奨します。
 
 ---
 
