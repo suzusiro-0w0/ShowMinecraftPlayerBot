@@ -1,0 +1,19 @@
+# Compose仕様の共通設定を記述する
+services:
+  # Botコンテナのビルド・実行設定を定義するサービス
+  bot:
+    # リポジトリ直下のDockerfileを使ってイメージを構築する
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Docker実行環境であることを明示し、起動コマンド選択に利用する
+    environment:
+      - RUNNING_IN_DOCKER=1
+    # ローカル設定をコンテナへ注入して同じ設定で実行できるようにする
+    volumes:
+      - ./config.ini:/app/config.ini:ro
+      - ./data:/app/data
+      # Compose制御を行うためにホストのDockerソケットを共有する
+      - /var/run/docker.sock:/var/run/docker.sock
+    # コンテナ停止時の挙動を明示し、手動停止まで自動再起動する
+    restart: unless-stopped

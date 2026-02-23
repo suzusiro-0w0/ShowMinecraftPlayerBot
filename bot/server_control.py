@@ -70,6 +70,10 @@ class ServerController:
         rcon_password: str,
         start_command: str,
         restart_command: str,
+        docker_compose_control_enabled: bool,
+        docker_compose_service_name: str,
+        docker_compose_project_dir: str,
+        docker_compose_project_name: str,
         command_timeout: int,
         operation_retry_attempts: int,
         operation_retry_interval: int,
@@ -86,6 +90,14 @@ class ServerController:
         self._start_command = start_command
         # 再起動コマンド文字列を保持する変数
         self._restart_command = restart_command
+        # Docker Compose制御を有効化するかどうかを保持する変数
+        self._docker_compose_control_enabled = docker_compose_control_enabled
+        # Docker Composeで操作対象となるMinecraftサービス名を保持する変数
+        self._docker_compose_service_name = docker_compose_service_name.strip()
+        # Docker Composeコマンドを実行するプロジェクトディレクトリを保持する変数
+        self._docker_compose_project_dir = docker_compose_project_dir.strip()
+        # Docker Composeで対象Stackを指定するプロジェクト名を保持する変数
+        self._docker_compose_project_name = docker_compose_project_name.strip()
         # コマンド実行のタイムアウト秒数を保持する変数
         self._command_timeout = command_timeout
         # サーバー状態確認の試行回数を保持する変数（1未満の場合は1回に矯正する）
@@ -208,12 +220,20 @@ class ServerController:
     # 引数: なし
     # 戻り値: ServerActionResult
     async def start_server(self) -> ServerActionResult:
-        # 外部コマンドを実行して起動を試みる処理
-        if not self._start_command:
-            return ServerActionResult(success=False, message="起動コマンドが設定されていません")
-        # 設定されたコマンドを絶対パスへ変換する処理
-        command_spec = self._resolve_start_command(self._start_command)
-        resolved_command = command_spec.command
+        # Docker Compose制御が有効な場合はCompose経由で起動する処理
+        if self._docker_compose_control_enabled:
+            compose_result = await self._start_via_docker_compose()
+            if not compose_result.success:
+                return compose_result
+            resolved_command = compose_result.detail or "docker compose up -d"
+            command_spec = CommandExecutionSpec(command=resolved_command, working_directory=self._docker_compose_project_dir or None)
+        else:
+            # 外部コマンドを実行して起動を試みる処理
+            if not self._start_command:
+                return ServerActionResult(success=False, message="起動スクリプトが設定されていません")
+            # 設定されたコマンドを絶対パスへ変換する処理
+            command_spec = self._resolve_start_command(self._start_command)
+            resolved_command = command_spec.command
         # 起動処理を開始したことをログへ出力する処理
         self._logger.info(
             "サーバー起動処理を開始します: command=%s working_directory=%s",
@@ -228,14 +248,18 @@ class ServerController:
             note="サーバー起動コマンドを実行しています",
         )
         try:
-            # 長時間稼働する起動スクリプトを想定し、出力を捕捉せずタイムアウト時の継続を許容する設定で実行する処理
-            result = await self._run_command(
-                resolved_command,
-                "サーバーを起動しました",
-                capture_output=False,
-                background_on_timeout=True,
-                working_directory=command_spec.working_directory,
-            )
+            # Docker Compose制御の有効時はCompose起動結果をそのまま利用する処理
+            if self._docker_compose_control_enabled:
+                result = ServerActionResult(success=True, message="Docker Compose経由でサーバー起動を指示しました", detail=resolved_command)
+            else:
+                # 長時間稼働する起動スクリプトを想定し、出力を捕捉せずタイムアウト時の継続を許容する設定で実行する処理
+                result = await self._run_command(
+                    resolved_command,
+                    "サーバーを起動しました",
+                    capture_output=False,
+                    background_on_timeout=True,
+                    working_directory=command_spec.working_directory,
+                )
         except Exception:
             await self._clear_transient_state()
             raise
@@ -270,7 +294,11 @@ class ServerController:
             note="RCON経由で停止コマンドを送信しています",
         )
         try:
-            result = await self._stop_via_rcon()
+            # Docker Compose制御が有効な場合はコンテナ停止を優先し、必要に応じてRCON停止を補助的に実行する処理
+            if self._docker_compose_control_enabled:
+                result = await self._stop_via_docker_compose()
+            else:
+                result = await self._stop_via_rcon()
         except Exception:
             await self._clear_transient_state()
             raise
@@ -320,42 +348,66 @@ class ServerController:
             else:
                 # 再起動コマンドが設定されていないため停止と起動を組み合わせることをログへ出力する処理
                 self._logger.info("停止と起動を組み合わせて再起動を実施します")
-                stop_result = await self._stop_via_rcon()
-                if not stop_result.success:
-                    await self._clear_transient_state()
-                    return ServerActionResult(
-                        success=False,
-                        message="停止に失敗したため再起動できません",
-                        detail=stop_result.detail,
+                if self._docker_compose_control_enabled:
+                    # Docker Compose制御時はCompose経由で停止してから起動する処理
+                    stop_result = await self._stop_via_docker_compose()
+                    if not stop_result.success:
+                        await self._clear_transient_state()
+                        return ServerActionResult(
+                            success=False,
+                            message="Docker Compose停止に失敗したため再起動できません",
+                            detail=stop_result.detail,
+                        )
+                    start_result = await self._start_via_docker_compose()
+                    if not start_result.success:
+                        await self._clear_transient_state()
+                        return ServerActionResult(
+                            success=False,
+                            message="Docker Compose起動に失敗したため再起動できません",
+                            detail=start_result.detail,
+                        )
+                    result = ServerActionResult(
+                        success=True,
+                        message="Docker Compose経由で停止後に起動して再起動しました",
+                        detail=f"stop={stop_result.detail} / start={start_result.detail}",
                     )
-                stop_verification = await self._ensure_expected_state("停止", "stopped")
-                if stop_verification is not None:
-                    await self._clear_transient_state()
-                    return ServerActionResult(
-                        success=False,
-                        message="停止後にサーバーが停止状態になりませんでした",
-                        detail=stop_verification.detail,
+                else:
+                    stop_result = await self._stop_via_rcon()
+                    if not stop_result.success:
+                        await self._clear_transient_state()
+                        return ServerActionResult(
+                            success=False,
+                            message="停止に失敗したため再起動できません",
+                            detail=stop_result.detail,
+                        )
+                    stop_verification = await self._ensure_expected_state("停止", "stopped")
+                    if stop_verification is not None:
+                        await self._clear_transient_state()
+                        return ServerActionResult(
+                            success=False,
+                            message="停止後にサーバーが停止状態になりませんでした",
+                            detail=stop_verification.detail,
+                        )
+                    if not self._start_command:
+                        await self._clear_transient_state()
+                        return ServerActionResult(success=False, message="起動スクリプトが未設定のため再起動できません")
+                    command_spec = self._resolve_start_command(self._start_command)
+                    # 停止後の再起動でも起動スクリプトは同様の条件で実行し、タイムアウト時の継続を許容する処理
+                    start_result = await self._run_command(
+                        command_spec.command,
+                        "サーバーを起動しました",
+                        capture_output=False,
+                        background_on_timeout=True,
+                        working_directory=command_spec.working_directory,
                     )
-                if not self._start_command:
-                    await self._clear_transient_state()
-                    return ServerActionResult(success=False, message="起動コマンドが未設定のため再起動できません")
-                command_spec = self._resolve_start_command(self._start_command)
-                # 停止後の再起動でも起動スクリプトは同様の条件で実行し、タイムアウト時の継続を許容する処理
-                start_result = await self._run_command(
-                    command_spec.command,
-                    "サーバーを起動しました",
-                    capture_output=False,
-                    background_on_timeout=True,
-                    working_directory=command_spec.working_directory,
-                )
-                if not start_result.success:
-                    await self._clear_transient_state()
-                    return ServerActionResult(
-                        success=False,
-                        message="起動に失敗したため再起動できません",
-                        detail=start_result.detail,
-                    )
-                result = ServerActionResult(success=True, message="停止後に起動して再起動しました")
+                    if not start_result.success:
+                        await self._clear_transient_state()
+                        return ServerActionResult(
+                            success=False,
+                            message="起動に失敗したため再起動できません",
+                            detail=start_result.detail,
+                        )
+                    result = ServerActionResult(success=True, message="停止後に起動して再起動しました")
         except Exception:
             await self._clear_transient_state()
             raise
@@ -571,6 +623,81 @@ class ServerController:
             message=f"サーバー{action_label}後に期待状態を確認できませんでした",
             detail=detail,
         )
+
+    # このメソッドはDocker Composeの共通実行引数を組み立てる
+    # 呼び出し元: _start_via_docker_compose, _stop_via_docker_compose
+    # 引数: なし
+    # 戻り値: docker composeサブコマンドに付与するオプション文字列
+    def _build_docker_compose_scope_options(self) -> str:
+        # 生成するオプション文字列を順番に蓄積するための配列
+        option_tokens: List[str] = []
+        # プロジェクトディレクトリが設定されている場合に対象Stackの探索起点を追加する処理
+        if self._docker_compose_project_dir:
+            option_tokens.extend(["--project-directory", f'"{self._docker_compose_project_dir}"'])
+        # プロジェクト名が設定されている場合に対象Stack名を固定する処理
+        if self._docker_compose_project_name:
+            option_tokens.extend(["-p", self._docker_compose_project_name])
+        # 生成したトークンを空白区切りで連結して返す処理
+        return " ".join(option_tokens)
+
+    # このメソッドはDocker Compose経由でMinecraftサービスを起動する
+    # 呼び出し元: start_server
+    # 引数: なし
+    # 戻り値: ServerActionResult
+    async def _start_via_docker_compose(self) -> ServerActionResult:
+        # サービス名が未設定の場合に失敗を返す処理
+        if not self._docker_compose_service_name:
+            return ServerActionResult(success=False, message="Docker Composeのサービス名が未設定です")
+        # Docker Composeの起動コマンド文字列を組み立てるための変数
+        compose_scope_options = self._build_docker_compose_scope_options()
+        compose_scope_prefix = f"{compose_scope_options} " if compose_scope_options else ""
+        compose_command = f"docker compose {compose_scope_prefix}up -d {self._docker_compose_service_name}"
+        # composeコマンドを実行する作業ディレクトリを決定する変数
+        compose_workdir = self._docker_compose_project_dir or None
+        # Docker Composeでサービス起動を実行する処理
+        result = await self._run_command(
+            compose_command,
+            "Docker Compose経由でサーバー起動を指示しました",
+            capture_output=True,
+            background_on_timeout=False,
+            working_directory=compose_workdir,
+        )
+        # 実行したcomposeコマンド文字列を詳細に保持して返す処理
+        if result.detail:
+            result.detail = f"command={compose_command} / output={result.detail}"
+        else:
+            result.detail = f"command={compose_command}"
+        return result
+
+    # このメソッドはDocker Compose経由でMinecraftサービスを停止する
+    # 呼び出し元: stop_server
+    # 引数: なし
+    # 戻り値: ServerActionResult
+    async def _stop_via_docker_compose(self) -> ServerActionResult:
+        # サービス名が未設定の場合に失敗を返す処理
+        if not self._docker_compose_service_name:
+            return ServerActionResult(success=False, message="Docker Composeのサービス名が未設定です")
+        # まずRCON停止を試みてからコンテナ停止することで安全性を高める処理
+        rcon_result = await self._stop_via_rcon()
+        # Docker Composeの停止コマンド文字列を組み立てるための変数
+        compose_scope_options = self._build_docker_compose_scope_options()
+        compose_scope_prefix = f"{compose_scope_options} " if compose_scope_options else ""
+        compose_command = f"docker compose {compose_scope_prefix}stop {self._docker_compose_service_name}"
+        # composeコマンドを実行する作業ディレクトリを決定する変数
+        compose_workdir = self._docker_compose_project_dir or None
+        # Docker Composeでサービス停止を実行する処理
+        compose_result = await self._run_command(
+            compose_command,
+            "Docker Compose経由でサーバー停止を指示しました",
+            capture_output=True,
+            background_on_timeout=False,
+            working_directory=compose_workdir,
+        )
+        # RCON停止結果を補足情報として詳細に連結する処理
+        rcon_note = rcon_result.detail if rcon_result.detail else rcon_result.message
+        compose_detail = compose_result.detail if compose_result.detail else ""
+        compose_result.detail = f"command={compose_command} / rcon={rcon_note} / compose={compose_detail}"
+        return compose_result
 
     # このメソッドは停止コマンドの送信処理を共通化する
     # 呼び出し元: stop_server, restart_server

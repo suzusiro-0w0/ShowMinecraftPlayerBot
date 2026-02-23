@@ -48,8 +48,20 @@ class ServerSection:
 class CommandSection:
     """OSレベルのサーバー制御コマンドに関する設定値を保持するデータクラス"""
 
-    # サーバー起動スクリプトのパスを保持する変数
-    start_command: str
+    # サーバー起動スクリプトのWindows向け設定値を保持する変数
+    start_script_windows: str
+    # サーバー起動スクリプトのLinux向け設定値を保持する変数
+    start_script_linux: str
+    # サーバー起動スクリプトのDocker向け設定値を保持する変数
+    start_script_docker: str
+    # 旧設定キー（START_COMMAND / START_SCRIPT）を後方互換で保持する変数
+    start_script_legacy: str
+    # Docker ComposeでMinecraftサーバーサービスを制御する機能を使うかどうかを保持する変数
+    docker_compose_control_enabled: bool
+    # Docker Composeで制御対象にするMinecraftサーバーのサービス名を保持する変数
+    docker_compose_service_name: str
+    # Docker Composeコマンドを実行する作業ディレクトリを保持する変数
+    docker_compose_project_dir: str
     # サーバー再起動スクリプトのパスを保持する変数
     restart_command: str
     # 外部コマンド実行のタイムアウト秒数を保持する変数
@@ -186,12 +198,34 @@ class ConfigLoader:
             self._parser["commands"] = {}
         section = self._parser["commands"]
         return CommandSection(
-            start_command=section.get("start_command", ""),
+            start_script_windows=self._first_non_empty(section, "start_script_windows", "start_command_windows"),
+            start_script_linux=self._first_non_empty(section, "start_script_linux", "start_command_linux"),
+            start_script_docker=self._first_non_empty(section, "start_script_docker", "start_command_docker"),
+            start_script_legacy=self._first_non_empty(section, "start_script", "start_command"),
+            docker_compose_control_enabled=section.getboolean("docker_compose_control_enabled", False),
+            docker_compose_service_name=section.get("docker_compose_service_name", "minecraft"),
+            docker_compose_project_dir=section.get("docker_compose_project_dir", ""),
+            docker_compose_project_name=section.get("docker_compose_project_name", ""),
             restart_command=section.get("restart_command", ""),
             command_timeout=section.getint("command_timeout", 60),
             operation_retry_attempts=section.getint("operation_retry_attempts", 3),
             operation_retry_interval=section.getint("operation_retry_interval", 10),
         )
+
+    # このメソッドは複数候補キーから最初に設定された値を返す
+    # 呼び出し元: _load_command_section
+    # 引数: section はcommandsセクション、keys は優先順で探索するキー名
+    # 戻り値: 最初に見つかった非空文字列。全て空の場合は空文字列
+    def _first_non_empty(self, section: configparser.SectionProxy, *keys: str) -> str:
+        # 候補キーを優先順で順番に確認する処理
+        for key in keys:
+            # 現在の候補キーに対応する値を取得し、空白を除去するための変数
+            value = section.get(key, "").strip()
+            # 値が設定されている場合にその場で返す処理
+            if value:
+                return value
+        # いずれの候補キーも未設定だった場合に空文字列を返す処理
+        return ""
 
     # このメソッドはloggingセクションの値を読み込む
     # 呼び出し元: loadメソッド
@@ -223,7 +257,18 @@ class ConfigLoader:
                     "status_interval": "30",
                 },
                 "commands": {
+                    "start_script_windows": "",
+                    "start_script_linux": "",
+                    "start_script_docker": "",
+                    "start_script": "",
+                    "start_command_windows": "",
+                    "start_command_linux": "",
+                    "start_command_docker": "",
                     "start_command": "",
+                    "docker_compose_control_enabled": "false",
+                    "docker_compose_service_name": "minecraft",
+                    "docker_compose_project_dir": "",
+                    "docker_compose_project_name": "",
                     "restart_command": "",
                     "command_timeout": "60",
                     "operation_retry_attempts": "3",
