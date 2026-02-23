@@ -104,7 +104,7 @@
 - `example_config.ini`に以下のセクションを追加予定。
   - `[discord]`: Botトークン、ステータスチャンネルID、エラーチャンネルID、管理者ロールID。
   - `[server]`: RCONホスト、ポート、パスワード、状態更新間隔。
-  - `[commands]`: 起動・停止・再起動スクリプトパス、コマンドタイムアウト。
+  - `[commands]`: `START_SCRIPT_WINDOWS`（Windows専用）、`START_SCRIPT_LINUX`（Linux専用）、`START_SCRIPT_DOCKER`（Docker専用）、`START_SCRIPT`（後方互換）、`START_COMMAND`（最終互換）、`DOCKER_COMPOSE_CONTROL_ENABLED`、`DOCKER_COMPOSE_SERVICE_NAME`、`DOCKER_COMPOSE_PROJECT_DIR`、`DOCKER_COMPOSE_PROJECT_NAME`、再起動スクリプトパス、コマンドタイムアウト。
 - コメントは全て日本語で記述し、ユーザーが編集しやすい形にする。
 
 ## ロギング方針
@@ -121,6 +121,6 @@
 
 ## 導入手順サマリ
 1. 設計通りにファイルを分割し、必要なモジュールを追加。
-2. 設定ファイルを拡張し、既存ユーザーが移行できるようREADMEへ追記。
+2. 設定ファイルを拡張し、既存ユーザーが移行できるよう `docs/configuration_guide.md` と `docs/run_guide.md` に手順を分離して追記。
 3. 実装後に統合テストを実施し、Discord上の動作を確認。
 

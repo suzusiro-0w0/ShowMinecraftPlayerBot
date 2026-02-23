@@ -11,7 +11,7 @@
 ## サーバー操作コマンド
 - `bot/cogs/server_commands.py` が `!start_server`・`!stop_server`・`!restart_server` の3つのテキストコマンドを提供します。
 - いずれのコマンドも管理者ロールIDを保持したユーザーのみ実行でき、実行前に現在状態を確認して不正な操作を拒否します。
-- プレイヤーがオンラインの場合、停止・再起動コマンドは `ConfirmationView` による確認ダイアログで明示的な承認を要求します。
+- プレイヤーがオンラインの場合、停止・再起動スクリプトは `ConfirmationView` による確認ダイアログで明示的な承認を要求します。
 - 操作結果は `StatusMessageManager.update()` を通じて状況メッセージに反映され、成功時・失敗時それぞれのメッセージを残します。
 - コマンドを実行したユーザーと操作内容を状況チャンネルへ一時的に投稿し、一定時間後に自動削除します。
 
@@ -19,9 +19,20 @@
 - `bot/server_control.py` の `ServerController` が `mcrcon` を介した状態取得と停止指示、外部コマンドによる起動・再起動処理を担います。
 - 操作中は一時状態を保持し、`get_status()` 呼び出し時に「起動中」「停止処理中」などの中間状態を表示します。
 - `ServerActionResult` に成功可否と詳細メッセージを格納し、呼び出し元で状況メッセージやユーザー通知を更新します。
-- サーバー起動コマンドが指定タイムアウト内に終了しない場合でもプロセスを継続させ、ユーザーにはバックグラウンド実行中である旨の注意書きを返します。
+- サーバー起動スクリプトが指定タイムアウト内に終了しない場合でもプロセスを継続させ、ユーザーにはバックグラウンド実行中である旨の注意書きを返します。
 - 起動・停止・再起動後は設定値に基づき状態確認を複数回行い、期待状態へ遷移できなければ失敗として扱い管理チャンネルへ通知します。
 - 起動スクリプトはスクリプト配置ディレクトリを作業ディレクトリとして実行されるため、同梱された `user_jvm_args.txt` なども確実に読み込まれます。
+
+## 実行方式（3パターン）
+- Windows向けには `setup/setup.bat` と `run.bat` を用意し、仮想環境の構築からBot起動までを一貫して実行できます。
+- Linux/macOS向けには `setup/setup.sh` と `run.sh` を用意し、作業ディレクトリに依存せず起動できるようにしています。さらに `START_SCRIPT_WINDOWS` / `START_SCRIPT_LINUX` / `START_SCRIPT_DOCKER` を環境別に設定でき、`!start_server` 実行時に実行環境に合った起動スクリプトを優先利用できます。さらに `DOCKER_COMPOSE_CONTROL_ENABLED=true` の場合は同一/別Compose Stackのサービスを `docker compose` で直接制御できます（`DOCKER_COMPOSE_PROJECT_NAME` 利用）。
+- Docker向けには `Dockerfile` と `docker-compose.yml` を用意し、`config.ini` と `data` をボリュームマウントして設定・状態をホスト側に保持できます。
+
+
+## ドキュメント構成
+- 設定手順は `docs/configuration_guide.md` に分離し、`config.ini` の参照先を明確化しています。
+- 実行手順は `docs/run_guide.md` に分離し、Windows / Linux / Docker の手順を1か所で確認できます。
+- READMEには環境別に設定するキー（`START_SCRIPT_WINDOWS` / `START_SCRIPT_LINUX` / `START_SCRIPT_DOCKER`）を一覧化し、Bot実行環境とサーバー実行環境を分離できる前提を明記しています。
 
 ## エラー通知
 - `bot/utils/error_reporter.py` の `ErrorReporter` がエラー内容をEmbedにまとめ、設定されたエラーチャンネルへ送信します。
